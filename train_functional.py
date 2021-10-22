@@ -11,6 +11,7 @@ import argparse
 import importlib
 
 from model import rlf
+from utils import load_map
 
 
 
@@ -29,21 +30,28 @@ EPOCHS = args.epochs
 	
 
 e_sz = [64,64,16]
-f_sz = [64,64,8]
+f_sz = [64,64,1]
 
 world_fnm = './worlds/world8.grid'
+Q_fnm = 'Q.npy'
 
-model = rlf(e_sz,f_sz,world_fnm)
 
-Q = np.load('Q.npy')
-num_states = Q.shape[0]
+batch_size = 32;
+dataset = load_map(world_fnm,Q_fnm,batch_size)
+
+
+
+writer = tf.summary.create_file_writer('./logs/{}'.format(OUTDIR))
+
+model = rlf(e_sz,f_sz,world_fnm,batch_size,writer=writer)
+
 
 callbacks = [
 	keras.callbacks.TensorBoard(
 		'./logs/{}'.format(OUTDIR), update_freq=1)
 ]
 
-model.build([model.map_data.shape,(num_states*num_states,)])
+model.build((batch_size,4))
 print(model.summary())
 
 if LOAD:
@@ -52,14 +60,14 @@ if LOAD:
 	
 
 model.compile(
-	optimizer=keras.optimizers.Adam(1e-3),
+	optimizer=keras.optimizers.Adam(1e-4),
 	loss=tf.keras.losses.MeanSquaredError(),
 	metrics=[tf.keras.losses.MeanSquaredError()]
 )
 
 
 model.fit(
-	tr_ds,
+	dataset,
 	callbacks = callbacks,
 	epochs = EPOCHS,
 	verbose = 1

@@ -9,7 +9,9 @@ import pandas as pd
 
 class rlf(keras.Model):
 
-	def __init__(self,e_sz,f_sz,fnm):
+	def __init__(self,e_sz,f_sz,fnm,BATCH_SIZE,writer=None):
+	
+		self.BATCH_SIZE = BATCH_SIZE
 		super(rlf, self).__init__()
 		
 		try:
@@ -20,6 +22,7 @@ class rlf(keras.Model):
 			raise OSError()
 			
 		self.map_data = np.array(pd.read_csv(fnm,header=None,delimiter=' '));
+		self.M = self.map_data.shape[0]
 		self.map_sz = np.prod(self.map_data.shape)
 		
 		self.e_sz = e_sz
@@ -28,13 +31,12 @@ class rlf(keras.Model):
 		self.bottleneck_sz = 64
 		
 		self.e_total = self.total_func_size(2,self.e_sz)
-		self.f_total = self.total_func_size(2+2,self.f_sz)
+		self.f_total = self.total_func_size(self.e_sz[-1]*2,self.f_sz)
 		
-		self.writer = tf.summary.create_file_writer('./logs/{}'.format(OUTDIR))
+		self.writer = writer
 		
 		self._create_hypernet()
 		
-		self.optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3);
 		
 		
 		states = np.zeros((0,2))
@@ -46,15 +48,18 @@ class rlf(keras.Model):
 				if cell==0:
 					state = np.array([ih,iw]).reshape([1,2])
 					states = np.concatenate([states,state],axis=0)
-		self.states = states;
+		self.states = states.astype(np.float32);
 		self.angle_num = 8;
 		
+		self.I = tf.constant(self.map_data)
+		
+		self.optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4);
 
 	def total_func_size(self,in_dim,func_sz):
 		total_size = 0
 
 		for i in range(len(func_sz)):
-			out_dim = func_size[i]
+			out_dim = func_sz[i]
 			total_size += in_dim * out_dim + out_dim
 			in_dim = out_dim
 		return total_size
@@ -63,7 +68,7 @@ class rlf(keras.Model):
 	
 		
 	def _MSE(self,y,y_hat):
-		N = self.cfg.BATCH_SIZE
+		N = self.BATCH_SIZE
 		y_flat = tf.reshape(y,[N,-1])
 		y_hat_flat = tf.reshape(y_hat,[N,-1])
 		return tf.reduce_sum(tf.square(y_flat-y_hat_flat),axis=-1)
@@ -72,15 +77,23 @@ class rlf(keras.Model):
 
 		
 	def forward_pass(self, inputs):
-		[I,angles] = inputs;
 		
+		states = inputs
 		
-		theta_e, theta_f = self.get_theta(I)
-
-
-		e_s = self.func_theta(self.states,theta_e,self.e_sz,2)
-		print(e_s)
-		input()
+		theta_e, theta_f = self.get_theta(self.I)
+		
+		S = tf.slice(states,[0,0],[-1,2])
+		G = tf.slice(states,[0,1],[-1,2])
+		
+		e_s = self.func_theta(S,theta_e,self.e_sz,2)
+		e_g = self.func_theta(G,theta_e,self.e_sz,2)
+		
+		z = tf.concat([e_s,e_g],axis=-1)
+		
+		y = self.func_theta(z,theta_f,self.f_sz,2*self.e_sz[-1])
+		
+		return y		
+		
 
 	def func_theta(self,x,theta,sz,in_sz):
 	
@@ -121,98 +134,69 @@ class rlf(keras.Model):
 	
 	
 	def _create_hypernet(self):
-		self.flatten = tf.keras.layers.Flatten(name='flatten')
 		self.enc1 = tf.keras.layers.Dense(256,activation=tf.nn.elu,name='enc1')
 		self.enc2 = tf.keras.layers.Dense(256,activation=tf.nn.elu,name='enc2')
 		self.enc3 = tf.keras.layers.Dense(256,activation=tf.nn.elu,name='enc3')
-		self.bottleneck = tf.keras.layers.Dense(self.bottleneck_sz,activation=tf.nn.elu,name='bottleneck')
+		self.bottleneck = tf.keras.layers.Dense(self.bottleneck_sz,name='bottleneck')
 		self.e_dec = tf.keras.layers.Dense(self.e_total,name='e_dec')
 		self.f_dec = tf.keras.layers.Dense(self.f_total,name='f_dec')
 		
 	
 	def get_theta(self,I):
-		I_flat = self.flatten(I)
+		I_flat = tf.reshape(I,[1,-1])
 		z = self.enc1(I_flat)
 		z = self.enc2(z)
 		z = self.enc3(z)
 		z = self.bottleneck(z)
-		
+
 		theta_e = self.e_dec(z)
 		theta_f = self.f_dec(z)
 		
 		return theta_e, theta_f
 	
+
+		
+	def _MSE(self,y,y_hat):
+		N = self.BATCH_SIZE
+		y_flat = tf.reshape(y,[N,-1])
+		y_hat_flat = tf.reshape(y_hat,[N,-1])
+		return tf.reduce_sum(tf.square(y_flat-y_hat_flat),axis=-1)
+
+	def get_vars(self):
+		var_list = []
 	
+		for layer in self.layers:
+			var_list += layer.trainable_variables;
+		return var_list;
+		
 
 	def train_step(self, inputs):
 	
 		with tf.GradientTape(persistent=False) as tape:
-
-			self.forward_pass(inputs)
-				
-			'''
-			fp_loss = tf.reduce_mean(self.pred_error());
-			#fa_loss,baseline_loss,fa_loss_no_baseline = self.REINFORCE();
-			fa_loss = self.REINFORCE();
+			pred = self.forward_pass(inputs[0])
 			
-			_,cls_loss = self.compute_cls_loss()
-			cls_loss = tf.reduce_mean(cls_loss)
-				
-				
-				
-				
-			#baseline_vars = self.get_baseline_vars()
-			cls_vars = self.get_cls_vars()
-			state_vars = self.get_state_vars()
-			action_vars = self.get_action_vars()
+			loss = self._MSE(inputs[-1],pred)
 			
-
-			### Sanity check
-			all_vars = cls_vars+state_vars+action_vars;
 			
-			total_size = 0.0
+			all_vars = self.get_vars()
 			
-			for vr in all_vars:
-				vr_sz = np.prod(vr.get_shape().as_list())
-				total_size += vr_sz
-			#print(total_size)
-			#input()
-			
-			loss = fa_loss + fp_loss + cls_loss
-				
-				
 			gradients = tape.gradient(loss, all_vars)
-			clipped_gradients, norm = tf.clip_by_global_norm(gradients, 1.0)
-			self.optimizer1.apply_gradients(zip(gradients, all_vars))
-			'''
+			self.optimizer.apply_gradients(zip(gradients, all_vars))
 
-		
-		with self.writer.as_default():
-
-			tf.summary.scalar('fp_loss',fp_loss,self.optimizer1.iterations);
-			#tf.summary.scalar('fa_loss',fa_loss_no_baseline,self.optimizer1.iterations);
-			#tf.summary.scalar('baseline_loss',baseline_loss,self.optimizer1.iterations);
-			tf.summary.scalar('cls_loss',cls_loss,self.optimizer1.iterations);
-			tf.summary.scalar('loss',loss,self.optimizer1.iterations);
-
-
-		pred = self.activations['y_pred'][-1]
-		self.compiled_metrics.update_state(tf.tile(inputs[1],[self.cfg.M,]), pred)
+		self.compiled_metrics.update_state(inputs[-1], pred)
 
 		return {m.name: m.result() for m in self.metrics}
 
 	
 	
 	def test_step(self, inputs):
-		self.forward_pass(inputs, False)
-		pred = self.activations['y_pred'][-1]
-		self.compiled_metrics.update_state(tf.tile(inputs[1],[self.cfg.M,]), pred)
+		pred = self.forward_pass(inputs)
+		self.compiled_metrics.update_state(inputs[-1], pred)
 
 		return {m.name: m.result() for m in self.metrics}
 
-
-	def call(self, inputs, training=False):
-		return self.forward_pass(inputs, training)
+	def call(self, inputs):
+		return self.forward_pass(inputs)
 		
 	
 		

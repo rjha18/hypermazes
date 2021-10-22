@@ -11,8 +11,10 @@ grid_lvl = 8;
 env = gridworld_env('./worlds/world'+str(grid_lvl)+'.grid',step_penalty=0.05,gamma=GAMMA,display=False);
 
 # env.plot_vals('abc.png', random=True)
-Q = env.generate_Q()
 
+#Q = env.generate_Q()
+
+Q = np.load('Q.npy')
 print(Q.shape)
 input()
 np.save('Q.npy',Q)
