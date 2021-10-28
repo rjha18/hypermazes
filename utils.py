@@ -15,23 +15,6 @@ from scipy.io import loadmat
 
 
 
-def get_heatmap(map_data,vals):
-	heatmap = np.zeros(map_data.shape)
-	
-	count = 0
-	
-	for ih in range(map_data.shape[0]):
-		for iw in range(map_data.shape[1]):
-			cell = map_data[ih,iw]
-			
-			if cell==0:
-				heatmap[ih,iw] = vals[count]
-				count += 1
-
-			else:
-				heatmap[ih,iw] = -1.
-	return heatmap
-
 
 
 
@@ -61,11 +44,27 @@ def load_map(world_fnm,Q_fnm,batch_size):
 	
 	Q = np.load(Q_fnm).reshape([-1,])
 
-	S = np.array(states).reshape([-1,1,2,1])
-	G = np.array(states).reshape([1,-1,1,2])
 	
-
-	grid = (S*G).reshape([-1,4])	
+	idx = np.arange(states.shape[0])
+	
+	grid_y,grid_x = np.meshgrid(idx,idx)
+	
+	grid_x = grid_x.reshape([-1])
+	grid_y = grid_y.reshape([-1])
+	
+	S = states[grid_x]
+	G = states[grid_y]
+	grid = np.concatenate([S,G],axis=-1)
+	
+	
+	'''
+	print(grid)
+	input()
+	
+	for i in range(grid.shape[0]):
+		print(grid[i])
+		input()
+	'''
 		
 	
 	np.random.seed(1337)
@@ -76,7 +75,7 @@ def load_map(world_fnm,Q_fnm,batch_size):
 	Q = Q.astype(np.float32)
 	
 	
-	tr_ds = tf.data.Dataset.from_tensor_slices((grid,Q)).batch(batch_size,drop_remainder=True)
+	tr_ds = tf.data.Dataset.from_tensor_slices((grid,Q)).batch(batch_size,drop_remainder=False)
 	
 	return tr_ds;
 	

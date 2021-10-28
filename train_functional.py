@@ -51,7 +51,7 @@ callbacks = [
 		'./logs/{}'.format(OUTDIR), update_freq=1)
 ]
 
-model.build((batch_size,4))
+model.build((None,4))
 print(model.summary())
 
 if LOAD:
