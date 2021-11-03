@@ -341,6 +341,7 @@ class gridworld_env(tk.Tk):
 				elif cell==1:
 					heatmap[h,w] = -1.0;
 		
+		plt.clf()
 		plt.imshow(heatmap)
 		plt.colorbar()
 		if self.display:

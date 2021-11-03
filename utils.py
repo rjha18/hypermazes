@@ -46,12 +46,12 @@ def load_map(world_fnm,Q_fnm,batch_size,train=True,s=None):
 	if not train:
 		S = states[(np.ones(len(states)) * s).astype(np.int32)]
 		G = states[np.arange(len(states))]
-		grid = np.concatenate([S, G], axis=-1)
+		grid = np.concatenate([G,S], axis=-1)
 		Q = Q[s]
 	else:
 		idx = np.arange(states.shape[0])
 		
-		grid_y,grid_x = np.meshgrid(idx,idx)
+		grid_x,grid_y = np.meshgrid(idx,idx)
 		
 		grid_x = grid_x.reshape([-1])
 		grid_y = grid_y.reshape([-1])

@@ -54,12 +54,16 @@ model.load_weights('./logs/{}/model/weights'.format(INDIR)).expect_partial()
 model.compile(
 	optimizer=keras.optimizers.Adam(1e-4),
 	loss=tf.keras.losses.MeanSquaredError(),
-	metrics=[tf.keras.losses.MeanSquaredError()]
+	metrics=[tf.keras.losses.MeanSquaredError()] # add run_eagerly=True
 )
 
 
 dataset = load_map(world_fnm,Q_fnm,batch_size,False,TARGET)
 results = model.predict(dataset)
+
+
+#model.forward(something)
+# E_S = model.embedding.numpy()
 
 
 env = gridworld_env('./worlds/world8.grid',step_penalty=0.05,gamma=0.9,display=False);
