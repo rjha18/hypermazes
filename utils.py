@@ -19,7 +19,7 @@ from scipy.io import loadmat
 
 
 
-def load_map(world_fnm,Q_fnm,batch_size,train=True,s=None):
+def load_map(world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None):
 	try:
 		fp = open(world_fnm, 'r')
 		fp.close()
@@ -76,7 +76,10 @@ def load_map(world_fnm,Q_fnm,batch_size,train=True,s=None):
 		idx = np.random.permutation(grid.shape[0])
 		grid = grid[idx]
 		Q = Q.reshape([-1,])[idx]
-	Q = Q*np.pi/4.0
+	
+	if not classification:
+		Q = Q*np.pi/4.0
+	
 	Q = Q.astype(np.float32)
 	
 	print(Q)

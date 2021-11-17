@@ -21,11 +21,13 @@ from utils import load_map
 parser = argparse.ArgumentParser()
 parser.add_argument("--outdir", help="Directory for results and log files", default='./log', type=str)
 parser.add_argument("--load", help="load model",default=0, type=int)
-parser.add_argument("--epochs", help="# of training epochs",default=100, type=int)
+parser.add_argument("--epochs", help="# of training epochs",default=10, type=int)
+parser.add_argument("--classification", help="use classification loss",default=False, action='store_true')
 args = parser.parse_args()
 OUTDIR = args.outdir
 LOAD = args.load
 EPOCHS = args.epochs
+CLASSIFICATION = args.classification
 
 	
 
@@ -37,13 +39,19 @@ Q_fnm = 'Q.npy'
 
 
 batch_size = 32;
-dataset = load_map(world_fnm,Q_fnm,batch_size)
+dataset = load_map(world_fnm,Q_fnm,batch_size,classification=CLASSIFICATION)
 
 
 
 writer = tf.summary.create_file_writer('./logs/{}'.format(OUTDIR))
 
-model = rlf(e_sz,f_sz,world_fnm,batch_size,writer=writer)
+if CLASSIFICATION:
+	loss_fn = tf.keras.losses.SparseCategoricalCrossentropy()
+	f_sz[-1] = 8
+else:
+	loss_fn = tf.keras.losses.MeanSquaredError()
+
+model = rlf(e_sz,f_sz,world_fnm,batch_size,writer=writer,classification=CLASSIFICATION)
 
 
 callbacks = [
@@ -60,9 +68,9 @@ if LOAD:
 	
 
 model.compile(
-	optimizer=keras.optimizers.Adam(1e-4),
-	loss=tf.keras.losses.MeanSquaredError(),
-	metrics=[tf.keras.losses.MeanSquaredError()]
+	optimizer=keras.optimizers.Adam(1e-5),
+	loss=loss_fn,
+	metrics=[loss_fn]
 )
 
 

@@ -9,9 +9,10 @@ import pandas as pd
 
 class rlf(keras.Model):
 
-	def __init__(self,e_sz,f_sz,fnm,BATCH_SIZE,writer=None):
+	def __init__(self,e_sz,f_sz,fnm,BATCH_SIZE,classification=False,writer=None):
 	
 		self.BATCH_SIZE = BATCH_SIZE
+		self.classification = classification
 		super(rlf, self).__init__()
 		
 		try:
@@ -54,6 +55,8 @@ class rlf(keras.Model):
 		self.I = tf.constant(self.map_data)
 		
 		self.optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4);
+		if self.classification:
+			self.softmax = tf.keras.layers.Softmax()
 
 	def total_func_size(self,in_dim,func_sz):
 		total_size = 0
@@ -64,26 +67,17 @@ class rlf(keras.Model):
 			in_dim = out_dim
 		return total_size
 		
-
-	
-		
-	def _MSE(self,y,y_hat):
-		N = self.BATCH_SIZE
-		y_flat = tf.reshape(y,[N,-1])
-		y_hat_flat = tf.reshape(y_hat,[N,-1])
-		return tf.reduce_sum(tf.square(y_flat-y_hat_flat),axis=-1)
-
-
-
 		
 	def forward_pass(self, inputs):
 		
 		states = inputs
-		
+		# states -= 10.0
+		# states = states/10.0
+
 		theta_e, theta_f = self.get_theta(self.I)
 		
 		S = tf.slice(states,[0,0],[-1,2])
-		G = tf.slice(states,[0,1],[-1,2])
+		G = tf.slice(states,[0,2],[-1,2])
 		
 		e_s = self.func_theta(S,theta_e,self.e_sz,2)
 		e_g = self.func_theta(G,theta_e,self.e_sz,2)
@@ -93,7 +87,6 @@ class rlf(keras.Model):
 		z = tf.concat([e_s,e_g],axis=-1)
 		
 		y = self.func_theta(z,theta_f,self.f_sz,2*self.e_sz[-1])
-		
 		return y		
 		
 
@@ -128,12 +121,11 @@ class rlf(keras.Model):
 			in_sz = out_sz
 
 		y = tf.squeeze(y,axis=1)
-		
+		if self.classification:
+			y = self.softmax(y)
+		print(y.shape)
 		return y;
 			
-			
-	
-	
 	
 	def _create_hypernet(self):
 		self.enc1 = tf.keras.layers.Dense(256,activation=tf.nn.elu,name='enc1')
@@ -155,14 +147,7 @@ class rlf(keras.Model):
 		theta_f = self.f_dec(z)
 		
 		return theta_e, theta_f
-	
 
-		
-	def _MSE(self,y,y_hat):
-		N = self.BATCH_SIZE
-		y_flat = tf.reshape(y,[N,-1])
-		y_hat_flat = tf.reshape(y_hat,[N,-1])
-		return tf.reduce_sum(tf.square(y_flat-y_hat_flat),axis=-1)
 
 	def get_vars(self):
 		var_list = []
@@ -177,7 +162,7 @@ class rlf(keras.Model):
 		with tf.GradientTape(persistent=False) as tape:
 			pred = self.forward_pass(inputs[0])
 			
-			loss = self._MSE(inputs[-1],pred)
+			loss = self.compiled_loss(inputs[-1],pred)
 			
 			
 			all_vars = self.get_vars()
@@ -200,6 +185,3 @@ class rlf(keras.Model):
 	def call(self, inputs):
 		return self.forward_pass(inputs)
 		
-	
-		
-			

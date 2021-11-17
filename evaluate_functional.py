@@ -18,9 +18,11 @@ from environment import gridworld_env
 parser = argparse.ArgumentParser()
 parser.add_argument("--indir", help="Directory for results and log files", default='./log', type=str)
 parser.add_argument("--target", help="the id of the target index to evaluate",default=0, type=int)
+parser.add_argument("--classification", help="use classification loss",default=False, action='store_true')
 args = parser.parse_args()
 INDIR = args.indir
 TARGET = args.target
+CLASSIFICATION = args.classification
 
 	
 
@@ -32,12 +34,16 @@ Q_fnm = 'Q.npy'
 
 
 batch_size = 332;
-dataset = load_map(world_fnm,Q_fnm,batch_size)
+dataset = load_map(world_fnm,Q_fnm,batch_size,classification=CLASSIFICATION)
 
 
+if CLASSIFICATION:
+	loss_fn = tf.keras.losses.SparseCategoricalCrossentropy()
+	f_sz[-1] = 8
+else:
+	loss_fn = tf.keras.losses.MeanSquaredError()
 
-
-model = rlf(e_sz,f_sz,world_fnm,batch_size)
+model = rlf(e_sz,f_sz,world_fnm,batch_size,classification=CLASSIFICATION)
 
 
 callbacks = [
@@ -53,20 +59,20 @@ model.load_weights('./logs/{}/model/weights'.format(INDIR)).expect_partial()
 
 model.compile(
 	optimizer=keras.optimizers.Adam(1e-4),
-	loss=tf.keras.losses.MeanSquaredError(),
-	metrics=[tf.keras.losses.MeanSquaredError()] # add run_eagerly=True
+	loss=loss_fn,
+	metrics=[loss_fn] # add run_eagerly=True
 )
 
-
-dataset = load_map(world_fnm,Q_fnm,batch_size,False,TARGET)
+# for TARGET in range(332):
+dataset = load_map(world_fnm,Q_fnm,batch_size,CLASSIFICATION,False,TARGET)
 results = model.predict(dataset)
-
-
-#model.forward(something)
-# E_S = model.embedding.numpy()
+if CLASSIFICATION:
+	results = np.argmax(results, axis=1)
+else:
+	results = np.round(results)
 
 
 env = gridworld_env('./worlds/world8.grid',step_penalty=0.05,gamma=0.9,display=False);
-env.plot_Q(np.load(Q_fnm), TARGET, 'Q.png', random=True)
-env.plot_results(results, TARGET, 'results.png', random=True)
+env.plot_Q(np.load(Q_fnm), TARGET, 'img/Q.png', random=True)
+env.plot_results(results, TARGET, 'img/results.png', random=True)
 
