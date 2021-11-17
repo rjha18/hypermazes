@@ -68,7 +68,7 @@ if LOAD:
 	
 
 model.compile(
-	optimizer=keras.optimizers.Adam(1e-5),
+	optimizer=keras.optimizers.Adam(1e-4),
 	loss=loss_fn,
 	metrics=[loss_fn]
 )

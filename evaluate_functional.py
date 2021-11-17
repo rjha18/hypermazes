@@ -15,6 +15,8 @@ from utils import load_map
 from environment import gridworld_env
 
 
+from sklearn.manifold import TSNE
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--indir", help="Directory for results and log files", default='./log', type=str)
 parser.add_argument("--target", help="the id of the target index to evaluate",default=0, type=int)
@@ -34,7 +36,6 @@ Q_fnm = 'Q.npy'
 
 
 batch_size = 332;
-dataset = load_map(world_fnm,Q_fnm,batch_size,classification=CLASSIFICATION)
 
 
 if CLASSIFICATION:
@@ -60,12 +61,48 @@ model.load_weights('./logs/{}/model/weights'.format(INDIR)).expect_partial()
 model.compile(
 	optimizer=keras.optimizers.Adam(1e-4),
 	loss=loss_fn,
-	metrics=[loss_fn] # add run_eagerly=True
+	metrics=[loss_fn], run_eagerly=True
 )
 
 # for TARGET in range(332):
 dataset = load_map(world_fnm,Q_fnm,batch_size,CLASSIFICATION,False,TARGET)
 results = model.predict(dataset)
+
+
+
+
+
+
+states = model.states
+
+LEFT = np.where(states[:,1]<=10)[0]
+RIGHT = np.where(states[:,1]>10)[0]
+UP = np.where(states[:,0]<=10)[0]
+DOWN = np.where(states[:,0]>10)[0]
+
+
+
+
+X = model.embedding.numpy()
+
+
+X = TSNE(n_components=2,perplexity=50.0,n_iter=10000,init='random').fit_transform(X)
+
+
+R1 = X[np.intersect1d(LEFT,UP),:]
+R2 = X[np.intersect1d(RIGHT,UP),:]
+R3 = X[np.intersect1d(RIGHT,DOWN),:]
+R4 = X[np.intersect1d(LEFT,DOWN),:]
+
+
+plt.scatter(R1[:,0],R1[:,1],color='r')
+plt.scatter(R2[:,0],R2[:,1],color='g')
+plt.scatter(R3[:,0],R3[:,1],color='y')
+plt.scatter(R4[:,0],R4[:,1],color='b')
+plt.show()
+
+
+
 if CLASSIFICATION:
 	results = np.argmax(results, axis=1)
 else:

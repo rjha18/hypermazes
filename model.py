@@ -83,6 +83,7 @@ class rlf(keras.Model):
 		e_g = self.func_theta(G,theta_e,self.e_sz,2)
 		
 		self.embedding = e_s
+		self.states = S
 		
 		z = tf.concat([e_s,e_g],axis=-1)
 		

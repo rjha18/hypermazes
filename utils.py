@@ -83,6 +83,7 @@ def load_map(world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None):
 	Q = Q.astype(np.float32)
 	
 	print(Q)
+	
 	tr_ds = tf.data.Dataset.from_tensor_slices((grid,Q)).batch(batch_size,drop_remainder=train)
 	
 	return tr_ds;
