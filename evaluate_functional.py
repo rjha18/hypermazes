@@ -86,7 +86,7 @@ DOWN = np.where(states[:,0]>10)[0]
 X = model.embedding.numpy()
 
 
-X = TSNE(n_components=2,perplexity=50.0,n_iter=10000,init='random').fit_transform(X)
+X = TSNE(n_components=2,perplexity=30.0,n_iter=10000,init='random').fit_transform(X)
 
 
 R1 = X[np.intersect1d(LEFT,UP),:]
