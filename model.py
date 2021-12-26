@@ -9,7 +9,7 @@ import pandas as pd
 
 class rlf(keras.Model):
 
-	def __init__(self,e_sz,f_sz,fnm,BATCH_SIZE,classification=False,writer=None):
+	def __init__(self,e_sz,f_sz,fnm,BATCH_SIZE,lr=1e-4,classification=False,writer=None):
 	
 		self.BATCH_SIZE = BATCH_SIZE
 		self.classification = classification
@@ -53,8 +53,8 @@ class rlf(keras.Model):
 		self.angle_num = 8;
 		
 		self.I = tf.constant(self.map_data)
-		
-		self.optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4);
+
+		self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr);
 		if self.classification:
 			self.softmax = tf.keras.layers.Softmax()
 
@@ -68,13 +68,8 @@ class rlf(keras.Model):
 		return total_size
 		
 		
-	def forward_pass(self, inputs):
-		
-		states = inputs
-		# states -= 10.0
-		# states = states/10.0
-
-		theta_e, theta_f = self.get_theta(self.I)
+	def forward_pass(self, maps, states):
+		theta_e, theta_f = self.get_theta(maps)
 		
 		S = tf.slice(states,[0,0],[-1,2])
 		G = tf.slice(states,[0,2],[-1,2])
@@ -124,7 +119,7 @@ class rlf(keras.Model):
 		y = tf.squeeze(y,axis=1)
 		if self.classification:
 			y = self.softmax(y)
-		print(y.shape)
+
 		return y;
 			
 	
@@ -139,10 +134,13 @@ class rlf(keras.Model):
 	
 	def get_theta(self,I):
 		I_flat = tf.reshape(I,[1,-1])
+		print(I_flat.shape)
+		input()
 		z = self.enc1(I_flat)
 		z = self.enc2(z)
 		z = self.enc3(z)
 		z = self.bottleneck(z)
+		self.hyperembedding = z
 
 		theta_e = self.e_dec(z)
 		theta_f = self.f_dec(z)
@@ -159,17 +157,17 @@ class rlf(keras.Model):
 		
 
 	def train_step(self, inputs):
-	
 		with tf.GradientTape(persistent=False) as tape:
-			pred = self.forward_pass(inputs[0])
+			pred = self.forward_pass(inputs[0], inputs[1])
 			
-			loss = self.compiled_loss(inputs[-1],pred)
+			loss = self.compiled_loss(inputs[-1], pred)
 			
 			
 			all_vars = self.get_vars()
 			
 			gradients = tape.gradient(loss, all_vars)
 			self.optimizer.apply_gradients(zip(gradients, all_vars))
+			# self.compiled_optimizer????
 
 		self.compiled_metrics.update_state(inputs[-1], pred)
 
@@ -178,11 +176,11 @@ class rlf(keras.Model):
 	
 	
 	def test_step(self, inputs):
-		pred = self.forward_pass(inputs)
+		pred = self.forward_pass(inputs[0], inputs[1])
 		self.compiled_metrics.update_state(inputs[-1], pred)
 
 		return {m.name: m.result() for m in self.metrics}
 
 	def call(self, inputs):
-		return self.forward_pass(inputs)
+		return self.forward_pass(inputs[0], inputs[1])
 		

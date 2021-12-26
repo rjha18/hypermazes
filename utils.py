@@ -79,16 +79,32 @@ def load_map(world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None):
 	
 	if not classification:
 		Q = Q*np.pi/4.0
+		Q = np.stack((np.sin(Q), np.cos(Q)), axis=1)
 	
 	Q = Q.astype(np.float32)
-	
-	print(Q)
-	
-	tr_ds = tf.data.Dataset.from_tensor_slices((grid,Q)).batch(batch_size,drop_remainder=train)
+	maps = np.tile(map_data, (Q.shape[0], 1, 1))
+	tr_ds = tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(batch_size,drop_remainder=train)
+	# tr_ds = tf.data.Dataset.from_tensor_slices((grid, Q)).batch(batch_size,drop_remainder=train)
 	
 	return tr_ds;
 	
+
+def MARE(y_true, y_pred):
+	"""	Mean Absolute Radian Error
+
+	Computes the mean distance in radians between parameters.
+	y_true, y_pred have form: (batch_size, (sin(a), cos(a)))
+
+	Trignometric Identities:
+		sin_ab = sin(a - b) = sin(a) cos(b) - cos(a) sin(b)
+		cos_ab = cos(a - b) = cos(a) cos(b) + sin(a) sin(b)
+	"""
 	
+
+	sin_ab = (y_true[:, 0] * y_pred[:, 1]) - (y_true[:, 1] * y_pred[:, 0])
+	cos_ab = (y_true[:, 1] * y_pred[:, 1]) - (y_true[:, 0] * y_pred[:, 0])
+
+	return tf.reduce_mean(tf.abs(tf.atan2(sin_ab, cos_ab)))
 	
 	
 	

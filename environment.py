@@ -320,7 +320,7 @@ class gridworld_env(tk.Tk):
 				print(f"Finished round {i}")
 		return np.array(Q)
 	
-	def plot_results(self, results, goal, fnm=None, random=False):
+	def plot_results(self, results, goal, fnm=None, random=False, target_num=8, wall_num=-1):
 		if random:
 			idx = np.random.randint(0,self.num_states)
 			self.goal_state = self.states[idx]
@@ -334,12 +334,12 @@ class gridworld_env(tk.Tk):
 
 				if cell==0:
 					if counter == goal:
-						heatmap[h,w] = 8
+						heatmap[h,w] = target_num
 					else:
 						heatmap[h,w] = results[counter]
 					counter += 1;
 				elif cell==1:
-					heatmap[h,w] = -1.0;
+					heatmap[h,w] = wall_num;
 		
 		plt.clf()
 		plt.imshow(heatmap)
@@ -349,9 +349,9 @@ class gridworld_env(tk.Tk):
 		if fnm:
 			plt.savefig(fnm)
 
-	def plot_Q(self, Q, goal, fnm=None, random=False):
+	def plot_Q(self, Q, goal, fnm=None, random=False, target_num=8, wall_num=-1):
 		print("Q", np.expand_dims(Q[goal], 1).shape)
-		self.plot_results(np.expand_dims(Q[goal], 1), goal, fnm, random)
+		self.plot_results(np.expand_dims(Q[goal], 1), goal, fnm, random, target_num, wall_num)
 
 	def split_pairs(self,split):
 
