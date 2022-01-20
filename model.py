@@ -29,10 +29,10 @@ class rlf(keras.Model):
 		self.e_sz = e_sz
 		self.f_sz = f_sz
 		
-		self.bottleneck_sz = 64
+		self.bottleneck_sz = 32
 		
 		self.e_total = self.total_func_size(2,self.e_sz)
-		self.f_total = self.total_func_size(self.e_sz[-1]*2,self.f_sz)
+		self.f_total = self.total_func_size(self.e_sz[-1],self.f_sz)
 		
 		self.writer = writer
 		
@@ -68,7 +68,8 @@ class rlf(keras.Model):
 		return total_size
 		
 		
-	def forward_pass(self, maps, states):
+	def forward_pass(self, inputs):
+		[maps, states, _] = inputs
 		theta_e, theta_f = self.get_theta(maps)
 		
 		S = tf.slice(states,[0,0],[-1,2])
@@ -80,10 +81,29 @@ class rlf(keras.Model):
 		self.embedding = e_s
 		self.states = S
 		
-		z = tf.concat([e_s,e_g],axis=-1)
+		z = e_g-e_s#tf.concat([e_s,e_g],axis=-1)
+		res = self.func_theta(z,theta_f,self.f_sz,self.e_sz[-1])
 		
-		y = self.func_theta(z,theta_f,self.f_sz,2*self.e_sz[-1])
-		return y		
+		'''
+		
+		
+		norm_s = tf.sqrt(tf.reduce_sum(tf.square(e_s),axis=-1,keepdims=True))+1e-4
+		norm_g = tf.sqrt(tf.reduce_sum(tf.square(e_g),axis=-1,keepdims=True))+1e-4
+		dot = tf.reduce_sum(e_s*e_g,axis=-1,keepdims=True)
+		
+		res = tf.math.acos(dot/(norm_s*norm_g))
+		
+		'''
+		
+		x = tf.slice(res,[0,0],[-1,1])
+		y = tf.slice(res,[0,1],[-1,1])
+		
+		x = tf.math.cos(x)
+		y = tf.math.sin(y)
+		
+		pts = tf.concat([x,y],axis=-1)
+		
+		return pts		
 		
 
 	def func_theta(self,x,theta,sz,in_sz):
@@ -124,18 +144,19 @@ class rlf(keras.Model):
 			
 	
 	def _create_hypernet(self):
-		self.enc1 = tf.keras.layers.Dense(256,activation=tf.nn.elu,name='enc1')
-		self.enc2 = tf.keras.layers.Dense(256,activation=tf.nn.elu,name='enc2')
-		self.enc3 = tf.keras.layers.Dense(256,activation=tf.nn.elu,name='enc3')
+		self.enc1 = tf.keras.layers.Dense(128,activation=tf.nn.elu,name='enc1')
+		self.enc2 = tf.keras.layers.Dense(128,activation=tf.nn.elu,name='enc2')
+		self.enc3 = tf.keras.layers.Dense(128,activation=tf.nn.elu,name='enc3')
 		self.bottleneck = tf.keras.layers.Dense(self.bottleneck_sz,name='bottleneck')
 		self.e_dec = tf.keras.layers.Dense(self.e_total,name='e_dec')
 		self.f_dec = tf.keras.layers.Dense(self.f_total,name='f_dec')
 		
 	
 	def get_theta(self,I):
-		I_flat = tf.reshape(I,[1,-1])
-		print(I_flat.shape)
-		input()
+	
+		N = tf.shape(I)[0]
+		I_flat = tf.reshape(I,[N,-1])
+
 		z = self.enc1(I_flat)
 		z = self.enc2(z)
 		z = self.enc3(z)
@@ -158,7 +179,8 @@ class rlf(keras.Model):
 
 	def train_step(self, inputs):
 		with tf.GradientTape(persistent=False) as tape:
-			pred = self.forward_pass(inputs[0], inputs[1])
+		
+			pred = self.forward_pass(inputs)
 			
 			loss = self.compiled_loss(inputs[-1], pred)
 			
@@ -176,11 +198,11 @@ class rlf(keras.Model):
 	
 	
 	def test_step(self, inputs):
-		pred = self.forward_pass(inputs[0], inputs[1])
+		pred = self.forward_pass(inputs)
 		self.compiled_metrics.update_state(inputs[-1], pred)
 
 		return {m.name: m.result() for m in self.metrics}
 
 	def call(self, inputs):
-		return self.forward_pass(inputs[0], inputs[1])
+		return self.forward_pass(inputs)
 		

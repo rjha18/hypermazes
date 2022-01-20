@@ -61,8 +61,16 @@ callbacks = [
 		'./logs/{}'.format(OUTDIR), update_freq=1)
 ]
 
-# model.build((batch_size, 21, 21, 4))
-# print(model.summary())
+
+
+ds_iter = iter(dataset)
+BATCH = next(ds_iter)
+
+
+
+
+model.build([(batch_size, 21, 21),(batch_size, 4),(batch_size, 2)])
+print(model.summary())
 
 if LOAD:
 	model.load_weights('./logs/{}/model/weights'.format(OUTDIR)).expect_partial()

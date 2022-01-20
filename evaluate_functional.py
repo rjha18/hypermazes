@@ -42,6 +42,11 @@ batch_size = 330;
 dataset = load_map(world_fnm,Q_fnm,batch_size,classification=CLASSIFICATION)
 
 
+
+ds_iter = iter(dataset)
+BATCH = next(ds_iter)
+
+
 if CLASSIFICATION:
 	loss_fn = tf.keras.losses.SparseCategoricalCrossentropy()
 	f_sz[-1] = 8
@@ -56,8 +61,9 @@ callbacks = [
 		'./logs/{}'.format(INDIR), update_freq=1)
 ]
 
-# model.build((batch_size,4))
-# print(model.summary())
+
+model.build([(batch_size, 21, 21),(batch_size, 4),(batch_size, 2)])
+print(model.summary())
 
 model.load_weights('./logs/{}/model/weights'.format(INDIR)).expect_partial()
 
@@ -70,7 +76,9 @@ model.compile(
 
 # for TARGET in range(332):
 dataset = load_map(world_fnm,Q_fnm,batch_size,CLASSIFICATION,False,TARGET)
-results = model.predict(dataset)
+ds_iter = iter(dataset)
+BATCH = next(ds_iter)
+results = model.forward_pass(BATCH)
 
 
 states = model.states
@@ -80,8 +88,14 @@ RIGHT = np.where(states[:,1]>10)[0]
 UP = np.where(states[:,0]<=10)[0]
 DOWN = np.where(states[:,0]>10)[0]
 
+
+from sklearn.decomposition import PCA
+
 X = model.embedding.numpy()
-X = TSNE(n_components=2,perplexity=30.0,n_iter=10000,init='random').fit_transform(X)
+pca = PCA(n_components=2)
+X = pca.fit_transform(X)
+
+#X = TSNE(n_components=2,n_iter=10000,init='random').fit_transform(X)
 
 R1 = X[np.intersect1d(LEFT,UP),:]
 R2 = X[np.intersect1d(RIGHT,UP),:]
