@@ -19,15 +19,17 @@ from scipy.io import loadmat
 
 
 
-def load_map(world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None):
+def load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None):
 	try:
 		fp = open(world_fnm, 'r')
+		fp = open(base_world_fnm, 'r')
 		fp.close()
 	except OSError:
 		print("Map file cannot be opened.")
 		raise OSError()
 		
 	map_data = np.array(pd.read_csv(world_fnm,header=None,delimiter=' '));
+	base_map_data = np.array(pd.read_csv(base_world_fnm,header=None,delimiter=' '));
 
 	states = np.zeros((0,2))
 	
@@ -82,7 +84,8 @@ def load_map(world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None):
 		Q = np.stack((np.sin(Q), np.cos(Q)), axis=1)
 	
 	Q = Q.astype(np.float32)
-	maps = np.tile(map_data, (Q.shape[0], 1, 1))
+	map_data = np.stack([map_data, map_data - base_map_data])
+	maps = np.tile(map_data, (Q.shape[0], 1, 1, 1))
 	tr_ds = tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(batch_size,drop_remainder=train)
 	# tr_ds = tf.data.Dataset.from_tensor_slices((grid, Q)).batch(batch_size,drop_remainder=train)
 	

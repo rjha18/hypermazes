@@ -31,16 +31,16 @@ CLASSIFICATION = args.classification
 
 e_sz = [64,64,16]
 f_sz = [64,64,2]
-
+base_world_fnm = './worlds/world8.grid'
 
 batch_size = 32;
 
-directions=['_top', '_bottom', '_left']
+directions=['_top', '_bottom', '_left', '']
 datasets = []
 for direction in directions:
 	world_fnm = './worlds/world8'+direction+'.grid'
 	Q_fnm = 'Q/Q'+direction+'.npy'
-	datasets.append(load_map(world_fnm,Q_fnm,batch_size,classification=CLASSIFICATION))
+	datasets.append(load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=CLASSIFICATION))
 
 dataset = tf.data.experimental.sample_from_datasets(datasets)
 
@@ -69,7 +69,7 @@ BATCH = next(ds_iter)
 
 
 
-model.build([(batch_size, 21, 21),(batch_size, 4),(batch_size, 2)])
+model.build([(batch_size, 2, 21, 21),(batch_size, 4),(batch_size, 2)])
 print(model.summary())
 
 if LOAD:

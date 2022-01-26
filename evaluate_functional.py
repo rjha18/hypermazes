@@ -34,18 +34,12 @@ CLASSIFICATION = args.classification
 e_sz = [64,64,16]
 f_sz = [64,64,2]
 direction='_' + DIRECTION
+base_world_fnm = './worlds/world8.grid'
 world_fnm = './worlds/world8'+direction+'.grid'
 Q_fnm = 'Q/Q'+direction+'.npy'
 
 
 batch_size = 330;
-dataset = load_map(world_fnm,Q_fnm,batch_size,classification=CLASSIFICATION)
-
-
-
-ds_iter = iter(dataset)
-BATCH = next(ds_iter)
-
 
 if CLASSIFICATION:
 	loss_fn = tf.keras.losses.SparseCategoricalCrossentropy()
@@ -62,7 +56,7 @@ callbacks = [
 ]
 
 
-model.build([(batch_size, 21, 21),(batch_size, 4),(batch_size, 2)])
+model.build([(batch_size, 2, 21, 21),(batch_size, 4),(batch_size, 2)])
 print(model.summary())
 
 model.load_weights('./logs/{}/model/weights'.format(INDIR)).expect_partial()
@@ -75,7 +69,7 @@ model.compile(
 )
 
 # for TARGET in range(332):
-dataset = load_map(world_fnm,Q_fnm,batch_size,CLASSIFICATION,False,TARGET)
+dataset = load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,CLASSIFICATION,False,TARGET)
 ds_iter = iter(dataset)
 BATCH = next(ds_iter)
 results = model.forward_pass(BATCH)
