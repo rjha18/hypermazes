@@ -17,9 +17,7 @@ from scipy.io import loadmat
 
 
 
-
-
-def load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None):
+def load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None,holdout=None):
 	try:
 		fp = open(world_fnm, 'r')
 		fp = open(base_world_fnm, 'r')
@@ -57,12 +55,14 @@ def load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,trai
 		
 		grid_x = grid_x.reshape([-1])
 		grid_y = grid_y.reshape([-1])
+
+		if holdout:
+			grid_x = grid_x[:-(len(holdout) * states.shape[0])]
+			grid_y = [x for x in grid_y if x not in holdout]
 		
 		S = states[grid_x]
 		G = states[grid_y]
 		grid = np.concatenate([S,G],axis=-1)
-
-		
 		
 		'''
 		print(grid)

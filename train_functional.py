@@ -36,6 +36,9 @@ base_world_fnm = './worlds/world8.grid'
 batch_size = 32;
 
 directions=['_top', '_bottom', '_left', '']
+
+holdout=np.random.randint(0, 330, 33)
+print(holdout)
 datasets = []
 for direction in directions:
 	world_fnm = './worlds/world8'+direction+'.grid'
