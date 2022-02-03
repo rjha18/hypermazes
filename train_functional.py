@@ -46,7 +46,7 @@ door_data = np.array(pd.read_csv(door_fnm,header=None,delimiter=' '));
 datasets = []
 maps = []
 combinations = []
-idx = np.random.choice(total_maps, num_maps)
+idx = np.random.choice(total_maps, num_maps, replace=False)
 for i, Q_fnm in enumerate(np.array(glob.glob("./Q/3x3/*.npy"))[idx]):
 	combination = tuple(map(int, Q_fnm[9:-5].split('_')))
 	combinations.append(combination)

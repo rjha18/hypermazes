@@ -61,9 +61,9 @@ def load_map(map_data,Q_fnm,batch_size,index,density=1,classification=False,trai
 			print(grid[i])
 			input()
 		'''
-			
-		np.random.seed(1337)
-		idx = np.random.permutation(int(np.ceil(grid.shape[0] * density)))
+
+		num_examples = int(np.ceil(grid.shape[0] * density))
+		idx = np.random.choice(grid.shape[0], num_examples, replace=False)
 		grid = grid[idx]
 		Q = Q.reshape([-1,])[idx]
 	
