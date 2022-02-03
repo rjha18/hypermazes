@@ -43,8 +43,7 @@ class start_is_goal(init_error):
 
 class gridworld_env(tk.Tk):
 
-	def __init__(self,fnm,step_penalty=-0.01,goal_reward=1.0,display=True,gamma=0.99):
-	
+	def __init__(self,fnm=None,step_penalty=-0.01,goal_reward=1.0,display=True,gamma=0.99):
 		try:
 			fp = open(fnm, 'r')
 			fp.close()
@@ -52,7 +51,11 @@ class gridworld_env(tk.Tk):
 			print("Map file cannot be opened.")
 			raise OSError()
 			
-		self.map_data = np.array(pd.read_csv(fnm,header=None,delimiter=' '));
+		map_data = np.array(pd.read_csv(fnm,header=None,delimiter=' '));
+		gridworld_env(map_data, step_penalty, goal_reward, display, gamma)
+
+	def __init__(self,map_data,step_penalty=-0.01,goal_reward=1.0,display=True,gamma=0.99):
+		self.map_data = map_data
 
 		if np.isnan(self.map_data).any():
 			self.handle_exception(grid_missing_values());
@@ -137,7 +140,7 @@ class gridworld_env(tk.Tk):
 		
 		self.A = np.zeros((self.num_states,self.num_states));
 
-		print("symmetric adj matrix")
+		# print("symmetric adj matrix")
 		for state in self.states:
 				state_key = self.state_to_key(state);
 				state_idx = self.state_lookup[state_key];
@@ -152,15 +155,18 @@ class gridworld_env(tk.Tk):
 						self.A[neighbour_idx,state_idx] = 1;
 						
 		self.graph = nx.from_numpy_matrix(self.A)
+		if nx.number_connected_components(self.graph) > 1:
+			raise OSError("Disconnected Graph!")
+
 		self.graph_metric = np.zeros(self.A.shape);
-		
+		paths = dict(nx.all_pairs_shortest_path(self.graph))
 		for i in range(self.num_states):
 			for j in range(i+1,self.num_states):
-				dist = len(nx.shortest_path(self.graph,source=i,target=j))-1;
+				# dist = len(nx.shortest_path(self.graph,source=i,target=j))-1;
+				dist = len(paths[i][j]) - 1
 				
 				self.graph_metric[i,j] = dist;
 				self.graph_metric[j,i] = dist;
-				
 		
 		
 		if self.display:
@@ -168,8 +174,7 @@ class gridworld_env(tk.Tk):
 			self.title('Gridworld Environment')
 			self.geometry('{0}x{1}'.format(self.H*UNIT,self.W*UNIT))
 			self.canvas = self._build_canvas()
-        
-		return;
+
 	
 	def _build_canvas(self):
 	
@@ -259,7 +264,6 @@ class gridworld_env(tk.Tk):
 		h = state[0] + 1
 		w = state[1] + 1
 
-		heatmap = np.pad(heatmap, 1, self.pad_with, padder=-1.0)
 		states = [heatmap[x, y] for x in [h-1, h, h+1] for y in [w-1, w, w+1]]
 		angles = [3, 2, 1, 4, 0, 5, 6, 7]
 		return angles[np.argmax(states[:4]+states[5:])]
@@ -291,13 +295,12 @@ class gridworld_env(tk.Tk):
 		if fnm:
 			plt.savefig(fnm)
 		
-	def generate_Q(self):
+	def generate_Q(self, verbosity=0):
 		Q = []
 		for i in range(len(self.states)):
 			goal_state = self.states[i]
 			heatmap = np.zeros(self.map_data.shape);
 			counter = 0;
-
 			for h in range(self.H):
 				for w in range(self.W):
 					cell = self.map_data[h,w];
@@ -307,16 +310,16 @@ class gridworld_env(tk.Tk):
 						counter += 1;
 					elif cell==1:
 						heatmap[h,w] = -1.0;
-			
 			directions = [];
+			heatmap = np.pad(heatmap, 1, self.pad_with, padder=-1.0)
 			for j in range(len(self.states)):
-				state = self.states[j].astype(np.int)
-				cell = self.map_data[state[0], state[1]];
+				state = self.states[j].astype(np.int)	
+				cell = self.map_data[state[0], state[1]];	
 				if cell==0:
 					directions.append(self.q_angle_by_state(heatmap, state));
 
 			Q.append(directions)
-			if i % 10 == 0:
+			if verbosity != 0 and i % verbosity == 0:
 				print(f"Finished round {i}")
 		return np.array(Q)
 	

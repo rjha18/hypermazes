@@ -3,19 +3,17 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 import numpy as np
-import sys
+import pandas as pd
 
 import matplotlib.pyplot as plt
 from tensorflow import keras
 import tensorflow as tf
 import argparse
 
-import importlib
-
 from model import rlf
-from utils import load_map, MARE
+from utils import load_map, MARE, generate_map, fnm_from_combination
 from environment import gridworld_env
-from sklearn.manifold import TSNE
+
 
 
 parser = argparse.ArgumentParser()
@@ -28,18 +26,24 @@ INDIR = args.indir
 TARGET = args.target
 DIRECTION = args.direction
 CLASSIFICATION = args.classification
+combination = (1, 2, 3)
 
 	
 
 e_sz = [64,64,16]
 f_sz = [64,64,2]
-direction='_' + DIRECTION
-base_world_fnm = './worlds/world8.grid'
-world_fnm = './worlds/world8'+direction+'.grid'
-Q_fnm = 'Q/Q'+direction+'.npy'
+
+base_world_fnm = './worlds/3x3/gen/base.grid'
+door_fnm = './worlds/3x3/gen/doors.grid'
+Q_fnm = './Q/3x3/' + fnm_from_combination(combination) + '.npy'
+base_data = np.array(pd.read_csv(base_world_fnm,header=None,delimiter=' '));
+door_data = np.array(pd.read_csv(door_fnm,header=None,delimiter=' '));
+map_data = generate_map(base_data, door_data, combination)
+
+maps = tf.convert_to_tensor([np.stack([map_data, map_data - base_data])])
 
 
-batch_size = 330;
+batch_size = 756;
 
 if CLASSIFICATION:
 	loss_fn = tf.keras.losses.SparseCategoricalCrossentropy()
@@ -47,7 +51,7 @@ if CLASSIFICATION:
 else:
 	loss_fn = tf.keras.losses.MeanSquaredError()
 
-model = rlf(e_sz,f_sz,world_fnm,batch_size,lr=1e-4,classification=CLASSIFICATION)
+model = rlf(e_sz,f_sz,batch_size,maps,lr=1e-4,classification=CLASSIFICATION)
 
 
 callbacks = [
@@ -56,7 +60,7 @@ callbacks = [
 ]
 
 
-model.build([(batch_size, 2, 21, 21),(batch_size, 4),(batch_size, 2)])
+model.build([(batch_size),(batch_size, 4),(batch_size, 2)])
 print(model.summary())
 
 model.load_weights('./logs/{}/model/weights'.format(INDIR)).expect_partial()
@@ -69,7 +73,8 @@ model.compile(
 )
 
 # for TARGET in range(332):
-dataset = load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,CLASSIFICATION,False,TARGET)
+
+dataset = load_map(map_data,base_world_fnm,Q_fnm,batch_size,0,CLASSIFICATION,False,TARGET)
 ds_iter = iter(dataset)
 BATCH = next(ds_iter)
 results = model.forward_pass(BATCH)
@@ -119,7 +124,7 @@ else:
 	results[idx] = results[idx] + 2 * np.pi
 
 print("Results", results.shape)
-env = gridworld_env(world_fnm,step_penalty=0.05,gamma=0.9,display=False);
+env = gridworld_env(map_data,step_penalty=0.05,gamma=0.9,display=False);
 env.plot_Q(Q, TARGET, 'img/Q.png', random=True, target_num=target_num, wall_num=wall_num)
 env.plot_results(results, TARGET, 'img/results.png', random=True, target_num=target_num, wall_num=wall_num)
 

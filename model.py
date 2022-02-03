@@ -1,31 +1,18 @@
-
-
-import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-import pandas as pd
 
 
 
 class rlf(keras.Model):
 
-	def __init__(self,e_sz,f_sz,fnm,BATCH_SIZE,lr=1e-4,classification=False,writer=None):
+	def __init__(self,e_sz,f_sz,BATCH_SIZE,maps,lr=1e-4,classification=False,writer=None):
 	
 		self.BATCH_SIZE = BATCH_SIZE
 		self.classification = classification
 		super(rlf, self).__init__()
-		
-		try:
-			fp = open(fnm, 'r')
-			fp.close()
-		except OSError:
-			print("Map file cannot be opened.")
-			raise OSError()
-			
-		self.map_data = np.array(pd.read_csv(fnm,header=None,delimiter=' '));
-		self.M = self.map_data.shape[0]
-		self.map_sz = np.prod(self.map_data.shape)
-		
+		self.maps = maps
+
+
 		self.e_sz = e_sz
 		self.f_sz = f_sz
 		
@@ -38,21 +25,7 @@ class rlf(keras.Model):
 		
 		self._create_hypernet()
 		
-		
-		
-		states = np.zeros((0,2))
-		
-		for ih in range(self.map_data.shape[0]):
-			for iw in range(self.map_data.shape[1]):
-				cell = self.map_data[ih,iw]
-				
-				if cell==0:
-					state = np.array([ih,iw]).reshape([1,2])
-					states = np.concatenate([states,state],axis=0)
-		self.states = states.astype(np.float32);
 		self.angle_num = 8;
-		
-		self.I = tf.constant(self.map_data)
 
 		self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr);
 		if self.classification:
@@ -69,7 +42,8 @@ class rlf(keras.Model):
 		
 		
 	def forward_pass(self, inputs):
-		[maps, states, _] = inputs
+		[indices, states, _] = inputs
+		maps = tf.gather(self.maps, tf.cast(indices, tf.int32), axis=0)
 		theta_e, theta_f = self.get_theta(maps)
 		
 		S = tf.slice(states,[0,0],[-1,2])

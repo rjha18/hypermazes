@@ -1,18 +1,15 @@
-
-import os
+import glob, os
 import numpy as np
-import sys
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
+os.environ["CUDA_VISIBLE_DEVICES"]="3"
 
-import matplotlib.pyplot as plt
 from tensorflow import keras
 import tensorflow as tf
 import argparse
 
-import importlib
+import pandas as pd
 
 from model import rlf
-from utils import load_map, MARE
+from utils import load_map, MARE, generate_map
 
 
 
@@ -31,21 +28,32 @@ CLASSIFICATION = args.classification
 
 e_sz = [64,64,16]
 f_sz = [64,64,2]
-base_world_fnm = './worlds/world8.grid'
+base_world_fnm = './worlds/3x3/gen/base.grid'
+door_fnm = './worlds/3x3/gen/doors.grid'
 
-batch_size = 32;
+batch_size = 128;
 
 directions=['_top', '_bottom', '_left', '']
 
-holdout=np.random.randint(0, 330, 33)
-print(holdout)
+# holdout = np.random.randint(0, 726, 144)
+# np.save("holdout.npy", holdout)
+
+base_data = np.array(pd.read_csv(base_world_fnm,header=None,delimiter=' '));
+door_data = np.array(pd.read_csv(door_fnm,header=None,delimiter=' '));
 datasets = []
-for direction in directions:
-	world_fnm = './worlds/world8'+direction+'.grid'
-	Q_fnm = 'Q/Q'+direction+'.npy'
-	datasets.append(load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=CLASSIFICATION))
+maps = []
+idx = np.random.choice(164, 20)
+for i, Q_fnm in enumerate(np.array(glob.glob("./Q/3x3/*.npy"))[idx]):
+	combination = tuple(map(int, Q_fnm[9:-5].split('_')))
+	print(combination)
+	map_data = generate_map(base_data, door_data, combination)
+	maps.append(np.stack([map_data, map_data - base_data]))
+	datasets.append(load_map(map_data,base_world_fnm,Q_fnm,batch_size,i,classification=CLASSIFICATION))
+maps = tf.convert_to_tensor(maps)
 
 dataset = tf.data.experimental.sample_from_datasets(datasets)
+# print(dataset)
+# input()
 
 writer = tf.summary.create_file_writer('./logs/{}'.format(OUTDIR))
 
@@ -56,7 +64,7 @@ else:
 	loss_fn = tf.keras.losses.MeanSquaredError()
 	# loss_fn = MARE
 
-model = rlf(e_sz,f_sz,world_fnm,batch_size,lr=1e-4,writer=writer,classification=CLASSIFICATION)
+model = rlf(e_sz,f_sz,batch_size,maps,lr=1e-4,writer=writer,classification=CLASSIFICATION)
 
 
 callbacks = [
@@ -72,7 +80,7 @@ BATCH = next(ds_iter)
 
 
 
-model.build([(batch_size, 2, 21, 21),(batch_size, 4),(batch_size, 2)])
+model.build([(batch_size),(batch_size, 4),(batch_size, 2)])
 print(model.summary())
 
 if LOAD:

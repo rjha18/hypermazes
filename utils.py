@@ -1,23 +1,18 @@
 
-from os import supports_dir_fd, truncate
 import tensorflow as tf;
 import numpy as np;
 
 from environment import *
 
-import matplotlib.pyplot as plt
 import pandas as pd
 
-from tensorflow import keras
 
-from PIL import Image
-from scipy.io import loadmat
 
+import re
 
 
 
-
-def load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None,holdout=None):
+def load_map_fn(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None,holdout=None):
 	try:
 		fp = open(world_fnm, 'r')
 		fp = open(base_world_fnm, 'r')
@@ -25,8 +20,19 @@ def load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,trai
 	except OSError:
 		print("Map file cannot be opened.")
 		raise OSError()
-		
 	map_data = np.array(pd.read_csv(world_fnm,header=None,delimiter=' '));
+	
+	load_map(map_data,base_world_fnm,Q_fnm,batch_size,classification,train,s,holdout)
+
+
+def load_map(map_data,base_world_fnm,Q_fnm,batch_size,index,classification=False,train=True,s=None,holdout=None):
+	try:
+		fp = open(base_world_fnm, 'r')
+		fp.close()
+	except OSError:
+		print("Map file cannot be opened.")
+		raise OSError()
+		
 	base_map_data = np.array(pd.read_csv(base_world_fnm,header=None,delimiter=' '));
 
 	states = np.zeros((0,2))
@@ -40,7 +46,6 @@ def load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,trai
 				states = np.concatenate([states,state],axis=0)
 	states = states.astype(np.float32);
 	M = states.shape[0]
-		
 	Q = np.load(Q_fnm)
 	
 	if not train:
@@ -56,7 +61,7 @@ def load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,trai
 		grid_x = grid_x.reshape([-1])
 		grid_y = grid_y.reshape([-1])
 
-		if holdout:
+		if holdout is not None:
 			grid_x = grid_x[:-(len(holdout) * states.shape[0])]
 			grid_y = [x for x in grid_y if x not in holdout]
 		
@@ -84,8 +89,19 @@ def load_map(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,trai
 		Q = np.stack((np.sin(Q), np.cos(Q)), axis=1)
 	
 	Q = Q.astype(np.float32)
-	map_data = np.stack([map_data, map_data - base_map_data])
-	maps = np.tile(map_data, (Q.shape[0], 1, 1, 1))
+	
+	maps = np.ones(grid.shape[0]) * index
+	
+	# print("Maps shape:", maps.shape)
+	# print("Grid shape:", grid.shape)
+	# print("Q shape:", Q.shape)
+	# print("Maps GB:", maps.nbytes / 1e9)
+	# print("Grid GB:", grid.nbytes / 1e9)
+	# print("Q GB:", Q.nbytes / 1e9)
+	# print("Total Estimate GB (before change):", ((maps.nbytes + grid.nbytes + Q.nbytes) / 1e9) * 164)
+	# print("Total Estimate GB (after change):", ((grid.nbytes + Q.nbytes + (Q.nbytes / 2) + maps[0].nbytes) / 1e9) * 164)
+
+	# input()
 	tr_ds = tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(batch_size,drop_remainder=train)
 	# tr_ds = tf.data.Dataset.from_tensor_slices((grid, Q)).batch(batch_size,drop_remainder=train)
 	
@@ -109,11 +125,17 @@ def MARE(y_true, y_pred):
 
 	return tf.reduce_mean(tf.abs(tf.atan2(sin_ab, cos_ab)))
 	
+
+
+def generate_map(base_data, door_data, combination):
+	door_temp = door_data.copy()
+	door_temp[~np.isin(door_temp, combination)] = 0
+	door_temp[door_temp > 0] = 1
+	return base_data + door_temp
 	
 	
-	
-	
-	
+def fnm_from_combination(combination):
+    return '_'.join(re.split('\W+', str(combination)))
 	
 	
 	
