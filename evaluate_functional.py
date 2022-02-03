@@ -74,7 +74,7 @@ model.compile(
 
 # for TARGET in range(332):
 
-dataset = load_map(map_data,base_world_fnm,Q_fnm,batch_size,0,CLASSIFICATION,False,TARGET)
+dataset = load_map(map_data,Q_fnm,batch_size,0,CLASSIFICATION,False,TARGET)
 ds_iter = iter(dataset)
 BATCH = next(ds_iter)
 results = model.forward_pass(BATCH)

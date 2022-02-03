@@ -32,6 +32,9 @@ base_world_fnm = './worlds/3x3/gen/base.grid'
 door_fnm = './worlds/3x3/gen/doors.grid'
 
 batch_size = 128;
+num_maps = 50
+total_maps = 164
+density = 0.5
 
 directions=['_top', '_bottom', '_left', '']
 
@@ -42,15 +45,16 @@ base_data = np.array(pd.read_csv(base_world_fnm,header=None,delimiter=' '));
 door_data = np.array(pd.read_csv(door_fnm,header=None,delimiter=' '));
 datasets = []
 maps = []
-idx = np.random.choice(164, 20)
+combinations = []
+idx = np.random.choice(total_maps, num_maps)
 for i, Q_fnm in enumerate(np.array(glob.glob("./Q/3x3/*.npy"))[idx]):
 	combination = tuple(map(int, Q_fnm[9:-5].split('_')))
-	print(combination)
+	combinations.append(combination)
 	map_data = generate_map(base_data, door_data, combination)
 	maps.append(np.stack([map_data, map_data - base_data]))
-	datasets.append(load_map(map_data,base_world_fnm,Q_fnm,batch_size,i,classification=CLASSIFICATION))
+	datasets.append(load_map(map_data,Q_fnm,batch_size,i,density,classification=CLASSIFICATION))
 maps = tf.convert_to_tensor(maps)
-
+print(combinations)
 dataset = tf.data.experimental.sample_from_datasets(datasets)
 # print(dataset)
 # input()
@@ -103,5 +107,3 @@ model.fit(
 )
 
 model.save_weights('./logs/{}/model/weights'.format(OUTDIR))
-
-

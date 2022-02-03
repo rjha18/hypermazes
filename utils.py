@@ -12,29 +12,13 @@ import re
 
 
 
-def load_map_fn(world_fnm,base_world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None,holdout=None):
-	try:
-		fp = open(world_fnm, 'r')
-		fp = open(base_world_fnm, 'r')
-		fp.close()
-	except OSError:
-		print("Map file cannot be opened.")
-		raise OSError()
+def load_map_fn(world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None,holdout=None):
 	map_data = np.array(pd.read_csv(world_fnm,header=None,delimiter=' '));
 	
-	load_map(map_data,base_world_fnm,Q_fnm,batch_size,classification,train,s,holdout)
+	load_map(map_data,Q_fnm,batch_size,classification,train,s,holdout)
 
 
-def load_map(map_data,base_world_fnm,Q_fnm,batch_size,index,classification=False,train=True,s=None,holdout=None):
-	try:
-		fp = open(base_world_fnm, 'r')
-		fp.close()
-	except OSError:
-		print("Map file cannot be opened.")
-		raise OSError()
-		
-	base_map_data = np.array(pd.read_csv(base_world_fnm,header=None,delimiter=' '));
-
+def load_map(map_data,Q_fnm,batch_size,index,density=1,classification=False,train=True,s=None,holdout=None):
 	states = np.zeros((0,2))
 	
 	for ih in range(map_data.shape[0]):
@@ -79,8 +63,7 @@ def load_map(map_data,base_world_fnm,Q_fnm,batch_size,index,classification=False
 		'''
 			
 		np.random.seed(1337)
-		
-		idx = np.random.permutation(grid.shape[0])
+		idx = np.random.permutation(int(np.ceil(grid.shape[0] * density)))
 		grid = grid[idx]
 		Q = Q.reshape([-1,])[idx]
 	
