@@ -323,12 +323,13 @@ class gridworld_env(tk.Tk):
 				print(f"Finished round {i}")
 		return np.array(Q)
 	
-	def plot_results(self, results, goal, fnm=None, random=False, target_num=8, wall_num=-1):
+	def plot_results(self, results, results_raw, goal, fnm=None, random=False, target_num=8, wall_num=-1):
 		if random:
 			idx = np.random.randint(0,self.num_states)
 			self.goal_state = self.states[idx]
 	
 		heatmap = np.zeros(self.map_data.shape);
+		angle = np.zeros((*self.map_data.shape, 2));
 		counter = 0;
 
 		for h in range(self.H):
@@ -338,23 +339,35 @@ class gridworld_env(tk.Tk):
 				if cell==0:
 					if counter == goal:
 						heatmap[h,w] = target_num
+						angle[h,w] = 0
 					else:
 						heatmap[h,w] = results[counter]
+						angle[h,w] = results_raw[counter]
 					counter += 1;
 				elif cell==1:
 					heatmap[h,w] = wall_num;
+					angle[h,w] = 0
+
 		
 		plt.clf()
-		plt.imshow(heatmap)
+		plt.imshow(heatmap, alpha=0.7)
 		plt.colorbar()
+
+		U = angle[:,:,1]
+		V = angle[:,:,0]
+		
+		U = U / ((U**2 + V**2) ** 0.5)
+		V = V / ((U**2 + V**2) ** 0.5)
+
+		plt.quiver(U,V,pivot="middle")
 		if self.display:
 			plt.show()
 		if fnm:
 			plt.savefig(fnm)
 
-	def plot_Q(self, Q, goal, fnm=None, random=False, target_num=8, wall_num=-1):
-		print("Q", np.expand_dims(Q[goal], 1).shape)
-		self.plot_results(np.expand_dims(Q[goal], 1), goal, fnm, random, target_num, wall_num)
+	def plot_Q(self, Q, Q_raw, goal, fnm=None, random=False, target_num=8, wall_num=-1):
+		Q = np.expand_dims(Q[goal], 1)
+		self.plot_results(Q, Q_raw, goal, fnm, random, target_num, wall_num)
 
 	def split_pairs(self,split):
 

@@ -18,7 +18,7 @@ def load_map_fn(world_fnm,Q_fnm,batch_size,classification=False,train=True,s=Non
 	load_map(map_data,Q_fnm,batch_size,classification,train,s,holdout)
 
 
-def load_map(map_data,Q_fnm,batch_size,index,density=1,classification=False,train=True,s=None,holdout=None):
+def load_map(map_data,Q_fnm,batch_size,index,classification=False,train=True,s=None,holdout=None):
 	states = np.zeros((0,2))
 	
 	for ih in range(map_data.shape[0]):
@@ -29,25 +29,21 @@ def load_map(map_data,Q_fnm,batch_size,index,density=1,classification=False,trai
 				state = np.array([ih,iw]).reshape([1,2])
 				states = np.concatenate([states,state],axis=0)
 	states = states.astype(np.float32);
-	M = states.shape[0]
 	Q = np.load(Q_fnm)
 	
 	if not train:
-		S = states[(np.ones(len(states)) * s).astype(np.int32)]
-		G = states[np.arange(len(states))]
-		grid = np.concatenate([G,S], axis=-1)
+		S = states[np.arange(len(states))]
+		G = states[(np.ones(len(states)) * s).astype(np.int32)]
+		grid = np.concatenate([S,G], axis=-1)
 		Q = Q[s]
 	else:
-		idx = np.arange(states.shape[0])
+		idx_s = np.arange(states.shape[0])
+		idx_g = np.delete(idx_s, holdout)
 		
-		grid_x,grid_y = np.meshgrid(idx,idx)
+		grid_x,grid_y = np.meshgrid(idx_s,idx_g)
 		
 		grid_x = grid_x.reshape([-1])
 		grid_y = grid_y.reshape([-1])
-
-		if holdout is not None:
-			grid_x = grid_x[:-(len(holdout) * states.shape[0])]
-			grid_y = [x for x in grid_y if x not in holdout]
 		
 		S = states[grid_x]
 		G = states[grid_y]
@@ -61,9 +57,7 @@ def load_map(map_data,Q_fnm,batch_size,index,density=1,classification=False,trai
 			print(grid[i])
 			input()
 		'''
-
-		num_examples = int(np.ceil(grid.shape[0] * density))
-		idx = np.random.choice(grid.shape[0], num_examples, replace=False)
+		idx = np.random.permutation(grid.shape[0])
 		grid = grid[idx]
 		Q = Q.reshape([-1,])[idx]
 	
@@ -121,8 +115,16 @@ def fnm_from_combination(combination):
     return '_'.join(re.split('\W+', str(combination)))
 	
 	
-	
-	
+def read_tuple_fnm(fnm):
+	with open(fnm, 'r') as f:
+		tuples = [tuple(map(int, i.split())) for i in f]
+		return tuples
+
+
+def write_tuples_to_fnm(tuples, fnm):
+	with open(fnm, 'w+') as f:
+		for combo in tuples:
+			f.write(' '.join(str(s) for s in combo) + '\n')	
 	
 	
 	
