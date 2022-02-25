@@ -59,7 +59,7 @@ def load_map(map_data,Q_fnm,batch_size,index,classification=False,train=True,s=N
 		'''
 		idx = np.random.permutation(grid.shape[0])
 		grid = grid[idx]
-		Q = Q.reshape([-1,])[idx]
+		Q = Q[idx_g].reshape([-1,])[idx]
 	
 	if not classification:
 		Q = Q*np.pi/4.0

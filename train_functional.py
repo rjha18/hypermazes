@@ -40,9 +40,9 @@ door_fnm = './worlds/3x3/gen/doors.grid'
 
 NUM_DOORS = 3
 batch_size = 128;
-num_maps = 75
+num_maps = 50
 total_maps = 164
-density = 0.25
+density = 0.50
 
 
 combinations_fnm = './data/combinations.txt'
