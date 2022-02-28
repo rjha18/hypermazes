@@ -5,10 +5,9 @@ from tensorflow import keras
 
 class rlf(keras.Model):
 
-	def __init__(self,e_sz,f_sz,BATCH_SIZE,maps,lr=1e-4,classification=False,writer=None):
+	def __init__(self,e_sz,f_sz,BATCH_SIZE,maps,lr=1e-4,writer=None):
 	
 		self.BATCH_SIZE = BATCH_SIZE
-		self.classification = classification
 		super(rlf, self).__init__()
 		self.maps = maps
 
@@ -28,8 +27,6 @@ class rlf(keras.Model):
 		self.angle_num = 8;
 
 		self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr);
-		if self.classification:
-			self.softmax = tf.keras.layers.Softmax()
 
 	def total_func_size(self,in_dim,func_sz):
 		total_size = 0
@@ -111,8 +108,6 @@ class rlf(keras.Model):
 			in_sz = out_sz
 
 		y = tf.squeeze(y,axis=1)
-		if self.classification:
-			y = self.softmax(y)
 
 		return y;
 			

@@ -1,0 +1,10 @@
+[experiment]
+data_dir="experiments/e1/"
+log_dir="experiments/e1/logs/"
+base_fnm="worlds/3x3/gen/base.grid"
+doors_fnm="worlds/3x3/gen/doors.grid"
+Q_fnms="./Q/3x3/*.npy"
+combination_train_pct = 0.4
+combination_val_pct = 0.1
+goal_state_train_pct = 0.5
+goal_state_val_pct = 0.1

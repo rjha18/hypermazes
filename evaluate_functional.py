@@ -32,14 +32,14 @@ CLASSIFICATION = args.classification
 COMBINATION = tuple(args.combination)
 
 
-combinations_fnm = './data/combinations.txt'
-train_combinations = read_tuple_fnm(combinations_fnm)
-if sum(COMBINATION) < 0:
-	idx = np.random.choice(len(train_combinations))
-	COMBINATION = train_combinations[idx]
-elif COMBINATION in train_combinations:
-	print("WARNING: the combination provided is in the train set!")
-	input()
+# combinations_fnm = './experiments/e1/combinations.npy'
+# train_combinations = np.load(combinations_fnm)
+# if sum(COMBINATION) < 0:
+# 	idx = np.random.choice(len(train_combinations))
+# 	COMBINATION = train_combinations[idx]
+# elif COMBINATION in train_combinations:
+# 	print("WARNING: the combination provided is in the train set!")
+# 	input()
 
 ground_truths = "./Q/3x3/*.npy"
 ground_truth_list = list(glob.glob(ground_truths))

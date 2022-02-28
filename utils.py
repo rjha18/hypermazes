@@ -12,13 +12,7 @@ import re
 
 
 
-def load_map_fn(world_fnm,Q_fnm,batch_size,classification=False,train=True,s=None,holdout=None):
-	map_data = np.array(pd.read_csv(world_fnm,header=None,delimiter=' '));
-	
-	load_map(map_data,Q_fnm,batch_size,classification,train,s,holdout)
-
-
-def load_map(map_data,Q_fnm,batch_size,index,classification=False,train=True,s=None,holdout=None):
+def load_map(map_data,Q_fnm,batch_size,index,train=True,s=None,train_states=None):
 	states = np.zeros((0,2))
 	
 	for ih in range(map_data.shape[0]):
@@ -38,9 +32,8 @@ def load_map(map_data,Q_fnm,batch_size,index,classification=False,train=True,s=N
 		Q = Q[s]
 	else:
 		idx_s = np.arange(states.shape[0])
-		idx_g = np.delete(idx_s, holdout)
 		
-		grid_x,grid_y = np.meshgrid(idx_s,idx_g)
+		grid_x,grid_y = np.meshgrid(idx_s,train_states)
 		
 		grid_x = grid_x.reshape([-1])
 		grid_y = grid_y.reshape([-1])
@@ -59,11 +52,10 @@ def load_map(map_data,Q_fnm,batch_size,index,classification=False,train=True,s=N
 		'''
 		idx = np.random.permutation(grid.shape[0])
 		grid = grid[idx]
-		Q = Q[idx_g].reshape([-1,])[idx]
+		Q = Q[train_states].reshape([-1,])[idx]
 	
-	if not classification:
-		Q = Q*np.pi/4.0
-		Q = np.stack((np.sin(Q), np.cos(Q)), axis=1)
+	Q = Q*np.pi/4.0
+	Q = np.stack((np.sin(Q), np.cos(Q)), axis=1)
 	
 	Q = Q.astype(np.float32)
 	
