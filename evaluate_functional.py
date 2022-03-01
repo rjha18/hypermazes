@@ -9,7 +9,7 @@ import tensorflow as tf
 import argparse
 
 from model import rlf
-from utils import get_Q_fnms, fnm_from_combination, get_log_dir, get_data_dir
+from utils import get_Q_fnms, fnm_from_combination, get_log_dir, get_data_dir, quantize
 from environment import gridworld_env
 from data_utils import generate_dataset_from_target
 
@@ -20,6 +20,7 @@ parser.add_argument("--target", help="the id of the target index to evaluate",de
 parser.add_argument('--combination', help="combination to examine", nargs=3, default=None, type=int)
 parser.add_argument('--comb_split', help="combination split to sample", default=None, type=str)
 parser.add_argument('--target_split', help="state split to sample", default=None, type=str)
+parser.add_argument('--quantize', help="quantize angle output", default=1, type=int)
 
 args = parser.parse_args()
 EXPERIMENT = args.experiment
@@ -30,6 +31,7 @@ else:
     COMBINATION = args.combination
 COMB_SPLIT = args.comb_split
 TARGET_SPLIT = args.target_split
+QUANTIZE = args.quantize
 
 
 
@@ -103,10 +105,19 @@ model.compile(
 )
 
 
-results = model.forward_pass(next(iter(dataset)))
-results_parsed = np.arctan2(results[:, 0], results[:, 1])
-idx = np.where(results_parsed < 0)
-results_parsed[idx] = results_parsed[idx] + 2 * np.pi
+sines_cosines = model.forward_pass(next(iter(dataset))).numpy()
+angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
+
+neg_idx = np.where(angles < 0)
+angles[neg_idx] += 2*np.pi
+
+if QUANTIZE:
+    levels = 8
+    angles = quantize(angles,levels)
+    sines_cosines[:,0] = np.sin(angles)
+    sines_cosines[:,1] = np.cos(angles)
+    
+    
 
 Q = Q[TARGET] * np.pi / 4.0
 Q_raw = np.stack([np.sin(Q), np.cos(Q)], axis=1)
@@ -114,7 +125,7 @@ Q = np.expand_dims(Q, axis=1)
 
 env = gridworld_env(map_data,step_penalty=0.05,gamma=0.9,display=False);
 env.plot_results(Q, Q_raw, TARGET, 'img/Q.png', random=True, target_num=7, wall_num=-2)
-env.plot_results(results_parsed, results, TARGET, 'img/results.png', random=True, target_num=7, wall_num=-2)
+env.plot_results(angles, sines_cosines, TARGET, 'img/results.png', random=True, target_num=7, wall_num=-2)
 
 
 ''' WEIGHTS viz code

@@ -356,8 +356,8 @@ class gridworld_env(tk.Tk):
 		U = angle[:,:,1]
 		V = angle[:,:,0]
 		
-		U = U / ((U**2 + V**2) ** 0.5)
-		V = V / ((U**2 + V**2) ** 0.5)
+		U = U / (1e-16+(U**2 + V**2) ** 0.5)
+		V = V / (1e-16+(U**2 + V**2) ** 0.5)
 
 		plt.quiver(U,V,pivot="middle")
 		if self.display:

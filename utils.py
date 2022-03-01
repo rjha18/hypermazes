@@ -8,6 +8,22 @@ from environment import *
 
 import re
 
+
+def quantize(angles, levels):
+    quantized_angles = np.array(angles)
+    
+    quantized_angles /= (2*np.pi)
+    quantized_angles *= levels
+    
+    quantized_angles = np.round(quantized_angles)
+    
+    quantized_angles /= levels
+    quantized_angles *= 2*np.pi
+    
+    return quantized_angles
+
+
+
 def has_splits(experiment):
     data_dir = extract_toml(experiment)['data_dir']
     return len(glob.glob(data_dir+"**/*.npy")) == 6
