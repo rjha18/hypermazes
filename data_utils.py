@@ -6,11 +6,34 @@ import tensorflow as tf
 from utils import generate_map, extract_toml, fnm_from_combination
 
 
-def get_splits(idx, train_pct, val_pct):
+
+def inspect_settings(experiment):
+    toml_data = extract_toml(experiment)
+    data_dir = toml_data['data_dir']
+    
+    for split in ['train','val','test']:
+        split_dir = data_dir+split
+        combinations = np.load(split_dir+'/combinations.npy')
+        states = np.load(split_dir+'/states.npy')
+
+        print(combinations)
+        print(states)
+        input()
+    
+
+def get_splits_by_num(idx, num_train_maps, num_val_maps):
+    assert num_train_maps > num_val_maps
+    num_train_left = num_train_maps - num_val_maps
+    return idx[:num_train_left], idx[num_train_left:num_train_maps], idx[num_train_maps:]
+    
+    
+    
+def get_splits_by_pct(idx, train_pct, val_pct):
     n_train_c = int(np.floor(train_pct * len(idx)))
     n_val_c = int(np.floor(val_pct * n_train_c))
     n_train_c -= n_val_c
     return idx[:n_train_c], idx[n_train_c:n_train_c+n_val_c], idx[n_train_c+n_val_c:]
+    
     
 
 def gen_splits(experiment, total_states=756, total_maps=164):
@@ -18,18 +41,32 @@ def gen_splits(experiment, total_states=756, total_maps=164):
     data_dir = toml_data['data_dir']
     ground_truths_path = toml_data['Q_fnms']
     goals_density = toml_data['goal_state_train_pct']
-    combination_density = toml_data['combination_train_pct']
     goals_val_pct = toml_data['goal_state_val_pct']
-    combination_val_pct = toml_data['combination_val_pct']
+    
+    num_train_maps = toml_data['num_train_maps']
+    num_val_maps = toml_data['num_val_maps']
 
     idx = np.random.permutation(total_maps)
     ground_truths = np.array(glob.glob(ground_truths_path))
-    tr_idx, v_idx, t_idx = get_splits(idx, combination_density, combination_val_pct)
+    tr_idx, v_idx, t_idx = get_splits_by_num(idx, num_train_maps, num_val_maps)
+    
+    print(tr_idx)
+    input()
+    print(v_idx)
+    input()
+    print(t_idx)
+    input()
+    print(len(tr_idx))
+    input()
+    print(len(v_idx))
+    input()
+    print(len(t_idx))
+    input()
     tr_combinations = ground_truths[tr_idx]
     v_combinations = ground_truths[v_idx]
     t_combinations = ground_truths[t_idx]
 
-    tr_states, v_states, t_states = get_splits(np.random.permutation(total_states),
+    tr_states, v_states, t_states = get_splits_by_pct(np.random.permutation(total_states),
                                                goals_density, goals_val_pct)
 
     os.makedirs(data_dir + 'train', exist_ok=True)
@@ -90,54 +127,54 @@ def generate_dataset_from_target(experiment, target, combination):
 
 
 def generate_map_states(map_data):
-	states = np.zeros((0,2))
-	
-	for ih in range(map_data.shape[0]):
-		for iw in range(map_data.shape[1]):
-			cell = map_data[ih,iw]
-			
-			if cell==0:
-				state = np.array([ih,iw]).reshape([1,2])
-				states = np.concatenate([states,state],axis=0)
-	return states.astype(np.float32)
+    states = np.zeros((0,2))
+    
+    for ih in range(map_data.shape[0]):
+        for iw in range(map_data.shape[1]):
+            cell = map_data[ih,iw]
+            
+            if cell==0:
+                state = np.array([ih,iw]).reshape([1,2])
+                states = np.concatenate([states,state],axis=0)
+    return states.astype(np.float32)
 
 
 def compute_Q_sin_cos(Q):
-	Q_new = Q*np.pi/4.0
-	Q_new = np.stack((np.sin(Q_new), np.cos(Q_new)), axis=1)
-	Q_new = Q_new.astype(np.float32)
-	return Q_new
+    Q_new = Q*np.pi/4.0
+    Q_new = np.stack((np.sin(Q_new), np.cos(Q_new)), axis=1)
+    Q_new = Q_new.astype(np.float32)
+    return Q_new
 
 
 def create_target_dataset(map_states,Q,target):
-	S = map_states[np.arange(len(map_states))]
-	G = map_states[(np.ones(len(map_states)) * target).astype(np.int32)]
-	grid = np.concatenate([S,G], axis=-1)
-	Q = Q[target]
-	
-	Q = compute_Q_sin_cos(Q)
-	
-	maps = np.ones(grid.shape[0]) * 0
+    S = map_states[np.arange(len(map_states))]
+    G = map_states[(np.ones(len(map_states)) * target).astype(np.int32)]
+    grid = np.concatenate([S,G], axis=-1)
+    Q = Q[target]
+    
+    Q = compute_Q_sin_cos(Q)
+    
+    maps = np.ones(grid.shape[0]) * 0
 
-	return tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(len(map_states))
+    return tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(len(map_states))
 
 
 def create_batch_dataset(map_states,Q,batch_size,index,indices):
-	idx_s = np.arange(map_states.shape[0])
-	
-	grid_x, grid_y = np.meshgrid(idx_s, indices)
-	grid_x = grid_x.reshape([-1])
-	grid_y = grid_y.reshape([-1])
-	
-	S = map_states[grid_x]
-	G = map_states[grid_y]
-	grid = np.concatenate([S,G],axis=-1)
+    idx_s = np.arange(map_states.shape[0])
+    
+    grid_x, grid_y = np.meshgrid(idx_s, indices)
+    grid_x = grid_x.reshape([-1])
+    grid_y = grid_y.reshape([-1])
+    
+    S = map_states[grid_x]
+    G = map_states[grid_y]
+    grid = np.concatenate([S,G],axis=-1)
 
-	idx = np.random.permutation(grid.shape[0])
-	grid = grid[idx]
-	Q = Q[indices].reshape([-1,])[idx]
-	
-	Q = compute_Q_sin_cos(Q)
-	maps = np.ones(grid.shape[0]) * index
+    idx = np.random.permutation(grid.shape[0])
+    grid = grid[idx]
+    Q = Q[indices].reshape([-1,])[idx]
+    
+    Q = compute_Q_sin_cos(Q)
+    maps = np.ones(grid.shape[0]) * index
 
-	return tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(batch_size,drop_remainder=True)
+    return tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(batch_size,drop_remainder=True)

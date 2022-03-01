@@ -1,7 +1,6 @@
 import os
+import sys
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 from tensorflow import keras
 import tensorflow as tf
@@ -9,7 +8,7 @@ import argparse
 
 from model import rlf
 from utils import has_splits, get_log_dir
-from data_utils import generate_train_val, gen_splits
+from data_utils import generate_train_val, gen_splits, inspect_settings
 
 
 # Parse arguments from script call
@@ -17,17 +16,24 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--experiment", help="Name of experiment to run", type=str)
 parser.add_argument("--load_model", help="load model", default=False, action='store_true')
 parser.add_argument("--epochs", help="# of training epochs", default=50, type=int)
+parser.add_argument("--inspect", help="inspect model settings", default=0, type=int)
 
 args = parser.parse_args()
 EXPERIMENT = args.experiment
 LOAD_MODEL = args.load_model
 EPOCHS = args.epochs
+INSPECT = args.inspect
 
 
 # Initialize training parameters
 e_sz = [64,64,16]
-f_sz = [64,64,2]
+f_sz = [32,32,1]
 batch_size = 128
+
+
+if INSPECT:
+	inspect_settings(EXPERIMENT)
+	exit(0)
 
 
 # Get training and validation data
@@ -70,6 +76,8 @@ model.fit(
 	epochs = EPOCHS,
 	verbose = 1
 )
+
+model.evaluate(val_dataset)
 
 
 # Save Model

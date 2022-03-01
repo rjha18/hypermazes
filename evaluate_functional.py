@@ -1,8 +1,6 @@
 
 import os
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import numpy as np
 
@@ -18,13 +16,21 @@ from data_utils import generate_dataset_from_target
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--experiment", help="Name of experiment to run", type=str)
-parser.add_argument("--target", help="the id of the target index to evaluate",default=-1, type=int)
-parser.add_argument('--combination', help="combination to examine", nargs=3, default=[-1, -1, -1], type=int)
+parser.add_argument("--target", help="the id of the target index to evaluate",default=None, type=int)
+parser.add_argument('--combination', help="combination to examine", nargs=3, default=None, type=int)
+parser.add_argument('--comb_split', help="combination split to sample", default=None, type=str)
+parser.add_argument('--target_split', help="state split to sample", default=None, type=str)
 
 args = parser.parse_args()
 EXPERIMENT = args.experiment
 TARGET = args.target
-COMBINATION = tuple(args.combination)
+if args.combination is not None:
+    COMBINATION = tuple(args.combination)
+else:
+    COMBINATION = args.combination
+COMB_SPLIT = args.comb_split
+TARGET_SPLIT = args.target_split
+
 
 
 log_dir = get_log_dir(EXPERIMENT)
@@ -32,26 +38,49 @@ data_dir = get_data_dir(EXPERIMENT)
 
 
 e_sz = [64,64,16]
-f_sz = [64,64,2]
+f_sz = [32,32,1]
 batch_size = 756
 
-
-test_combinations = list(np.load(data_dir + 'test/combinations.npy'))
 combo_fnm = get_Q_fnms(EXPERIMENT).replace('*', fnm_from_combination(COMBINATION))
-if sum(COMBINATION) < 0:
-	idx = np.random.choice(len(test_combinations))
-	COMBINATION = tuple(map(int, test_combinations[idx][9:-5].split('_')))
-	print(COMBINATION)
-elif combo_fnm not in test_combinations:
-	print("WARNING: the combination provided is in the train set!")
-	input()
 
-test_states = list(np.load(data_dir + 'test/states.npy'))
-if TARGET < 0:
-	TARGET = np.random.choice(test_states)
-elif TARGET not in test_states:
-	print("WARNING: the target provided is in the train set!")
-	input()
+if COMBINATION==None and COMB_SPLIT==None:
+    print('Either an evaluation combination or an evaluation combination split must be provided.')
+    exit(-1)
+    
+if COMBINATION==None:
+    eval_combinations = list(np.load(data_dir + COMB_SPLIT + '/combinations.npy'))
+    idx = np.random.choice(len(eval_combinations))
+    COMBINATION = tuple(map(int, eval_combinations[idx][9:-5].split('_')))
+    print('Choosing random eval combination from '+COMB_SPLIT+' split:', COMBINATION)
+else:
+    if COMBINATION in list(np.load(data_dir + 'train/combinations.npy')):
+        print("Combination provided belongs to train split.")
+    elif COMBINATION in list(np.load(data_dir + 'val/combinations.npy')):
+        print("Combination provided belongs to validation split.")
+    elif COMBINATION in list(np.load(data_dir + 'test/combinations.npy')):
+        print("Combination provided belongs to test split.")
+    else:
+        print("Combination does not exist.")
+        exit(-1)
+       
+if TARGET==None and TARGET_SPLIT==None:
+    print('Either an evaluation target or an evaluation target split must be provided.')
+    exit(-1) 
+
+if TARGET==None:
+    eval_states = list(np.load(data_dir + TARGET_SPLIT +'/states.npy'))
+    TARGET = np.random.choice(eval_states)
+    print('Choosing random eval state from '+TARGET_SPLIT+' split:', TARGET)
+else:
+    if TARGET in list(np.load(data_dir + 'train/states.npy')):
+        print("Target provided belongs to train split.")
+    elif TARGET in list(np.load(data_dir + 'val/states.npy')):
+        print("Target provided belongs to validation split.")
+    elif TARGET in list(np.load(data_dir + 'test/states.npy')):
+        print("Target provided belongs to test split.")
+    else:
+        print("Target does not exist.")
+        exit(-1)
 
 dataset, maps, Q, map_data = generate_dataset_from_target(EXPERIMENT, TARGET, COMBINATION)
 
@@ -68,9 +97,9 @@ model.load_weights(log_dir + 'model/weights').expect_partial()
 
 
 model.compile(
-	optimizer=keras.optimizers.Adam(1e-4),
-	loss=loss_fn,
-	metrics=[loss_fn], run_eagerly=True
+    optimizer=keras.optimizers.Adam(1e-4),
+    loss=loss_fn,
+    metrics=[loss_fn], run_eagerly=True
 )
 
 
