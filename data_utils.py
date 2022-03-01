@@ -1,26 +1,9 @@
 import os
 import numpy as np
 import pandas as pd
-import toml
 import glob
 import tensorflow as tf
-from utils import load_map, generate_map
-
-
-def has_splits(experiment):
-    data_dir = extract_toml(experiment)['data_dir']
-    return len(glob.glob(data_dir+"**/*.npy")) == 6
-
-
-def extract_toml(experiment):
-    toml_fnm = "experiments/" + experiment + "/experiment.toml"
-    return toml.load(toml_fnm)['experiment']
-
-
-def get_log_dir(experiment):
-    log_dir = extract_toml(experiment)['log_dir']
-    os.makedirs(log_dir, exist_ok=True)
-    return log_dir
+from utils import generate_map, extract_toml, fnm_from_combination
 
 
 def get_splits(idx, train_pct, val_pct):
@@ -83,6 +66,78 @@ def generate_dataset_from_splits(experiment, split, batch_size, map_offset=0):
     for i, Q_fnm in enumerate(combinations):
         combination = tuple(map(int, Q_fnm[9:-5].split('_')))
         map_data = generate_map(base_data, door_data, combination)
+        map_states = generate_map_states(map_data)
         maps.append(np.stack([map_data, map_data - base_data]))
-        datasets.append(load_map(map_data,Q_fnm,batch_size,map_offset+i,train_states=states))
+        Q = np.load(Q_fnm)
+        datasets.append(create_batch_dataset(map_states, Q, batch_size, map_offset + i, states))
     return tf.data.experimental.sample_from_datasets(datasets), tf.convert_to_tensor(maps)
+
+
+def generate_dataset_from_target(experiment, target, combination):
+    experiment_data = extract_toml(experiment)
+    base_data = np.array(pd.read_csv(experiment_data['base_fnm'], header=None, delimiter=' '));
+    door_data = np.array(pd.read_csv(experiment_data['doors_fnm'], header=None, delimiter=' '));
+
+    map_data = generate_map(base_data, door_data, combination)
+    map_states = generate_map_states(map_data)
+    
+    Q_fnm = experiment_data['Q_fnms'].replace('*', fnm_from_combination(combination))
+    Q = np.load(Q_fnm)
+
+    maps = tf.convert_to_tensor([np.stack([map_data, map_data - base_data])])
+    dataset = create_target_dataset(map_states,Q,target)
+    return dataset, maps, Q, map_data
+
+
+def generate_map_states(map_data):
+	states = np.zeros((0,2))
+	
+	for ih in range(map_data.shape[0]):
+		for iw in range(map_data.shape[1]):
+			cell = map_data[ih,iw]
+			
+			if cell==0:
+				state = np.array([ih,iw]).reshape([1,2])
+				states = np.concatenate([states,state],axis=0)
+	return states.astype(np.float32)
+
+
+def compute_Q_sin_cos(Q):
+	Q_new = Q*np.pi/4.0
+	Q_new = np.stack((np.sin(Q_new), np.cos(Q_new)), axis=1)
+	Q_new = Q_new.astype(np.float32)
+	return Q_new
+
+
+def create_target_dataset(map_states,Q,target):
+	S = map_states[np.arange(len(map_states))]
+	G = map_states[(np.ones(len(map_states)) * target).astype(np.int32)]
+	grid = np.concatenate([S,G], axis=-1)
+	Q = Q[target]
+	
+	Q = compute_Q_sin_cos(Q)
+	
+	maps = np.ones(grid.shape[0]) * 0
+
+	return tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(len(map_states))
+
+
+def create_batch_dataset(map_states,Q,batch_size,index,indices):
+	idx_s = np.arange(map_states.shape[0])
+	
+	grid_x, grid_y = np.meshgrid(idx_s, indices)
+	grid_x = grid_x.reshape([-1])
+	grid_y = grid_y.reshape([-1])
+	
+	S = map_states[grid_x]
+	G = map_states[grid_y]
+	grid = np.concatenate([S,G],axis=-1)
+
+	idx = np.random.permutation(grid.shape[0])
+	grid = grid[idx]
+	Q = Q[indices].reshape([-1,])[idx]
+	
+	Q = compute_Q_sin_cos(Q)
+	maps = np.ones(grid.shape[0]) * index
+
+	return tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(batch_size,drop_remainder=True)

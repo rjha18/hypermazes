@@ -8,7 +8,8 @@ import tensorflow as tf
 import argparse
 
 from model import rlf
-from data_utils import generate_train_val, gen_splits, has_splits, get_log_dir
+from utils import has_splits, get_log_dir
+from data_utils import generate_train_val, gen_splits
 
 
 # Parse arguments from script call
@@ -49,7 +50,7 @@ model.build([(batch_size),(batch_size, 4),(batch_size, 2)])
 print(model.summary())
 
 if LOAD_MODEL:
-	model.load_weights('./logs/{}/model/weights'.format(log_dir))\
+	model.load_weights(log_dir + 'model/weights')\
 		 .expect_partial()
 
 
@@ -72,4 +73,4 @@ model.fit(
 
 
 # Save Model
-model.save_weights('./logs/{}/model/weights'.format(log_dir))
+model.save_weights(log_dir + 'model/weights')
