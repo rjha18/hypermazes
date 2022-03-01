@@ -50,18 +50,6 @@ def gen_splits(experiment, total_states=756, total_maps=164):
     ground_truths = np.array(glob.glob(ground_truths_path))
     tr_idx, v_idx, t_idx = get_splits_by_num(idx, num_train_maps, num_val_maps)
     
-    print(tr_idx)
-    input()
-    print(v_idx)
-    input()
-    print(t_idx)
-    input()
-    print(len(tr_idx))
-    input()
-    print(len(v_idx))
-    input()
-    print(len(t_idx))
-    input()
     tr_combinations = ground_truths[tr_idx]
     v_combinations = ground_truths[v_idx]
     t_combinations = ground_truths[t_idx]

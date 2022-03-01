@@ -6,13 +6,14 @@ import matplotlib.pyplot as plt
 
 class rlf(keras.Model):
 
-	def __init__(self,e_sz,f_sz,BATCH_SIZE,maps,lr=1e-4,classification=False,writer=None):
+	def __init__(self,e_sz,f_sz,BATCH_SIZE,maps,method=1,lr=1e-4,classification=False,writer=None):
 	
 		self.BATCH_SIZE = BATCH_SIZE
 		self.classification = classification
 		super(rlf, self).__init__()
 		self.maps = maps
 		self.use_conv = False
+
 
 		self.e_sz = e_sz
 		self.f_sz = f_sz
@@ -24,7 +25,14 @@ class rlf(keras.Model):
 		
 		self.writer = writer
 		
-		self._create_hypernet()
+		self._create_encoder()
+		if method==1:
+			self.hypernet = True
+			self._create_hypernet()
+		else:
+			self.hypernet = False
+			self._create_embedding()
+			
 		
 		self.angle_num = 8;
 
@@ -52,16 +60,23 @@ class rlf(keras.Model):
 		S = tf.slice(states,[0,0],[-1,2])
 		G = tf.slice(states,[0,2],[-1,2])
 		
-		theta_e, theta_f = self.get_theta(maps)
+		if self.hypernet:
+			theta_e, theta_f = self.get_theta(maps)
+			
+			e_s = self.func_theta(S,theta_e,self.e_sz,2)
+			e_g = self.func_theta(G,theta_e,self.e_sz,2)
 		
-		e_s = self.func_theta(S,theta_e,self.e_sz,2)
-		e_g = self.func_theta(G,theta_e,self.e_sz,2)
+			func_in = tf.concat([e_s,e_g],axis=-1)
+			theta = self.func_theta(func_in,theta_f,self.f_sz,2*self.e_sz[-1])
+		else:
+			z = self.encode(maps)
+			e_s = self.embed(S,z)
+			e_g = self.embed(G,z)
+			
+			theta = self.get_angle(e_s,e_g)
 		
 		self.embedding = e_s
 		self.states = S
-		
-		z = tf.concat([e_s,e_g],axis=-1)
-		theta = self.func_theta(z,theta_f,self.f_sz,2*self.e_sz[-1])
 		
 		x = tf.math.sin(theta)
 		y = tf.math.cos(theta)
@@ -109,8 +124,7 @@ class rlf(keras.Model):
 		return y;
 			
 	
-	def _create_hypernet(self):
-	
+	def _create_encoder(self):
 		if self.use_conv:
 			base_sz = 16
 			self.conv1 = tf.keras.layers.Conv2D(base_sz, [5,5], strides=(2, 2), activation=tf.nn.leaky_relu, padding='same',name='conv1')
@@ -134,14 +148,30 @@ class rlf(keras.Model):
 			self.fc1 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='fc1')
 			self.fc2 = tf.keras.layers.Dense(128,activation=tf.nn.leaky_relu,name='fc2')
 			self.fc3 = tf.keras.layers.Dense(128,activation=tf.nn.leaky_relu,name='fc3')
-			
 		self.bottleneck = tf.keras.layers.Dense(self.bottleneck_sz,activation=None,name='bottleneck')
+			
+	
+	def _create_embedding(self):
+	
+		self.emb1 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='emb1')
+		self.emb2 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='emb2')
+		self.emb3 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='emb3')
+		self.emb4 = tf.keras.layers.Dense(16,activation=None,name='emb4')
+		
+		self.angle1 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='angle1')
+		self.angle2 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='angle2')
+		self.angle3 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='angle3')
+		self.angle4 = tf.keras.layers.Dense(1,activation=None,name='angle4')
+		
+	
+	def _create_hypernet(self):
+	
 		self.e_dec = tf.keras.layers.Dense(self.e_total,name='e_dec',kernel_initializer=keras.initializers.RandomNormal(stddev=1e-5))
 		self.f_dec = tf.keras.layers.Dense(self.f_total,name='f_dec',kernel_initializer=keras.initializers.RandomNormal(stddev=1e-5))
 		
 	
-	def get_theta(self,I):
-
+	def encode(self,I):
+	
 		if self.use_conv:
 			h1 = self.conv1(I)
 			h1 += self.conv11(h1) + self.conv12(h1)
@@ -159,6 +189,19 @@ class rlf(keras.Model):
 		else:
 			z = self.fc3(self.fc2(self.fc1(self.flat1(I))))
 		z = self.bottleneck(z)
+		return z
+		
+	def embed(self,x,z):
+		emb_in = tf.concat([x,z],axis=-1)
+		return self.emb4(self.emb3(self.emb2(self.emb1(emb_in))))
+		
+	def get_angle(self,e_s,e_g):
+		angle_in = tf.concat([e_s,e_g],axis=-1)
+		return self.angle4(self.angle3(self.angle2(self.angle1(angle_in))))
+		
+	def get_theta(self,I):
+
+		z = self.encode(I)
 		
 		self.hyperembedding = z
 

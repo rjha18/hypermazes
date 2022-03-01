@@ -9,19 +9,47 @@ from environment import *
 import re
 
 
+directions = {
+            0 : [1,0],
+            1 : [1,-1],
+            2 : [0,-1],
+            3 : [-1,-1],
+            4 : [-1,0],
+            5 : [-1,1],
+            6 : [0,1],
+            7 : [1,1]
+        };
+
+
 def quantize(angles, levels):
     quantized_angles = np.array(angles)
     
     quantized_angles /= (2*np.pi)
     quantized_angles *= levels
     
-    quantized_angles = np.round(quantized_angles)
+    # CHECK: Here the % operator makes the topography cyclic. Otherwise we
+    # can get 0 or 8 for the same quantum (angle=0)
+    
+    quantized_angles = np.round(quantized_angles)%levels
+    quantized_angle_idx = np.array(quantized_angles,dtype=int)
     
     quantized_angles /= levels
     quantized_angles *= 2*np.pi
-    
-    return quantized_angles
 
+    return quantized_angles, quantized_angle_idx
+
+def quantize_angles(sines_cosines, angles):
+
+    
+    neg_idx = np.where(angles < 0)
+    angles[neg_idx] += 2*np.pi
+
+    levels = 8
+    angles, angle_idx = quantize(angles,levels)
+    sines_cosines[:,0] = np.sin(angles)
+    sines_cosines[:,1] = np.cos(angles)
+    
+    return sines_cosines, angles, angle_idx
 
 
 def has_splits(experiment):

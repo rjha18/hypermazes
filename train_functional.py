@@ -7,7 +7,7 @@ import tensorflow as tf
 import argparse
 
 from model import rlf
-from utils import has_splits, get_log_dir
+from utils import has_splits, get_log_dir, extract_toml
 from data_utils import generate_train_val, gen_splits, inspect_settings
 
 
@@ -50,7 +50,11 @@ callbacks = [keras.callbacks.TensorBoard(log_dir, update_freq=1)]
 
 
 # Initialize, build, and compile model
-model = rlf(e_sz,f_sz,batch_size,maps,lr=1e-4,writer=writer)
+
+
+toml_data = extract_toml(EXPERIMENT)
+
+model = rlf(e_sz,f_sz,batch_size,maps,method=toml_data['hypernet'],lr=1e-4,writer=writer)
 model.build([(batch_size),(batch_size, 4),(batch_size, 2)])
 
 print(model.summary())

@@ -66,6 +66,10 @@ class gridworld_env(tk.Tk):
 		self.display = display;
 		self.gamma = gamma;
 		
+		'''
+		plt.imshow(map_data)
+		plt.show()
+		'''
 		
 		self.state_lookup = {};
 		self.state_counts = {};
@@ -149,12 +153,31 @@ class gridworld_env(tk.Tk):
 				for action in range(4):
 					neighbour_idx = self.state_lookup[self.state_to_key(neighbours[action])];
 
-					if self.A[state_idx,neighbour_idx]==0:
+					if self.A[state_idx,neighbour_idx]==0 and neighbour_idx!=state_idx:
 						self.A[state_idx,neighbour_idx] = 1;
 						
 						self.A[neighbour_idx,state_idx] = 1;
-						
+			
+					
 		self.graph = nx.from_numpy_matrix(self.A)
+		
+		'''
+		pos = np.fliplr(self.states)
+		node_sizes = [3,]*756
+
+		nodes = nx.draw_networkx_nodes(self.graph, pos, node_size=node_sizes, node_color="blue")
+		edges = nx.draw_networkx_edges(
+			self.graph,
+			pos,
+			node_size=node_sizes,
+			arrowstyle="->",
+			arrowsize=3,
+			width=1
+		)
+
+		plt.show()
+		'''
+		
 		if nx.number_connected_components(self.graph) > 1:
 			raise OSError("Disconnected Graph!")
 
@@ -323,7 +346,7 @@ class gridworld_env(tk.Tk):
 				print(f"Finished round {i}")
 		return np.array(Q)
 	
-	def plot_results(self, results, results_raw, goal, fnm=None, random=False, target_num=8, wall_num=-1):
+	def plot_results(self, results, results_raw, goal, fnm=None, random=False, target_num=8, wall_num=-1 ,display_arrows=True):
 		if random:
 			idx = np.random.randint(0,self.num_states)
 			self.goal_state = self.states[idx]
@@ -353,13 +376,14 @@ class gridworld_env(tk.Tk):
 		plt.imshow(heatmap, alpha=0.7)
 		plt.colorbar()
 
-		U = angle[:,:,1]
-		V = angle[:,:,0]
-		
-		U = U / (1e-16+(U**2 + V**2) ** 0.5)
-		V = V / (1e-16+(U**2 + V**2) ** 0.5)
+		if display_arrows:
+			U = angle[:,:,1]
+			V = angle[:,:,0]
+			
+			U = U / (1e-16+(U**2 + V**2) ** 0.5)
+			V = V / (1e-16+(U**2 + V**2) ** 0.5)
 
-		plt.quiver(U,V,pivot="middle")
+			plt.quiver(U,V,pivot="middle")
 		if self.display:
 			plt.show()
 		if fnm:
