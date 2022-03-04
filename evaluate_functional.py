@@ -9,7 +9,7 @@ import tensorflow as tf
 import argparse
 
 from model import rlf
-from utils import get_Q_fnms, fnm_from_combination, get_log_dir, get_data_dir, quantize_angles, extract_toml
+from utils import get_Q_fnms, fnm_from_combination, get_log_dir, get_data_dir, quantize_angles, extract_toml, setup_model
 from environment import gridworld_env
 from data_utils import generate_dataset_from_target
 
@@ -37,9 +37,6 @@ log_dir = get_log_dir(EXPERIMENT)
 data_dir = get_data_dir(EXPERIMENT)
 
 
-e_sz = [64,64,16]
-f_sz = [32,32,1]
-batch_size = 756
 
 
 if COMBINATION==None and COMB_SPLIT==None:
@@ -83,27 +80,12 @@ else:
         print("Target does not exist.")
         exit(-1)
 
+
+batch_size = 756
+
 dataset, maps, Q, map_data = generate_dataset_from_target(EXPERIMENT, TARGET, COMBINATION)
 
-
-loss_fn = tf.keras.losses.MeanSquaredError()
-toml_data = extract_toml(EXPERIMENT)
-model = rlf(e_sz,f_sz,batch_size,maps,method=toml_data['hypernet'],lr=1e-4)
-callbacks = [keras.callbacks.TensorBoard(log_dir, update_freq=1)]
-
-
-model.build([(batch_size),(batch_size, 4),(batch_size, 2)])
-print(model.summary())
-
-model.load_weights(log_dir + 'model/weights').expect_partial()
-
-
-model.compile(
-    optimizer=keras.optimizers.Adam(1e-4),
-    loss=loss_fn,
-    metrics=[loss_fn], run_eagerly=True
-)
-
+model = setup_model(EXPERIMENT,batch_size,maps);
 model.evaluate(dataset)
 
 sines_cosines = model.forward_pass(next(iter(dataset))).numpy()

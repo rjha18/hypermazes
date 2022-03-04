@@ -105,7 +105,6 @@ def generate_dataset_from_target(experiment, target, combination):
 
     map_data = generate_map(base_data, door_data, combination)
     map_states = generate_map_states(map_data)
-    
     Q_fnm = experiment_data['Q_fnms'].replace('*', fnm_from_combination(combination))
     Q = np.load(Q_fnm)
 
@@ -135,8 +134,9 @@ def compute_Q_sin_cos(Q):
 
 
 def create_target_dataset(map_states,Q,target):
-    S = map_states[np.arange(len(map_states))]
-    G = map_states[(np.ones(len(map_states)) * target).astype(np.int32)]
+    normalized_map_states = normalize_states(map_states,scale=4.0)
+    S = normalized_map_states[np.arange(len(normalized_map_states))]
+    G = normalized_map_states[(np.ones(len(normalized_map_states)) * target).astype(np.int32)]
     grid = np.concatenate([S,G], axis=-1)
     Q = Q[target]
     
@@ -144,18 +144,25 @@ def create_target_dataset(map_states,Q,target):
     
     maps = np.ones(grid.shape[0]) * 0
 
-    return tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(len(map_states))
+    return tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(len(normalized_map_states))
 
+
+def normalize_states(x,scale=1.0):
+	L = 1#np.min(x,axis=0,keepdims=True)
+	H = 29#np.max(x,axis=0,keepdims=True)
+	return scale*(x-L)/(H-L)
 
 def create_batch_dataset(map_states,Q,batch_size,index,indices):
     idx_s = np.arange(map_states.shape[0])
+    
+    normalized_map_states = normalize_states(map_states,scale=4.0)
     
     grid_x, grid_y = np.meshgrid(idx_s, indices)
     grid_x = grid_x.reshape([-1])
     grid_y = grid_y.reshape([-1])
     
-    S = map_states[grid_x]
-    G = map_states[grid_y]
+    S = normalized_map_states[grid_x]
+    G = normalized_map_states[grid_y]
     grid = np.concatenate([S,G],axis=-1)
 
     idx = np.random.permutation(grid.shape[0])

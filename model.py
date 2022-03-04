@@ -2,32 +2,71 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 import matplotlib.pyplot as plt
+from utils import hyperfanin_for_kernel, hyperfanin_for_bias, extract_toml, get_log_dir
+from tensorflow.keras.regularizers import L2
+
+def setup_model(experiment,batch_size,maps,load=False,eager=False):
+
+    loss_fn = tf.keras.losses.MeanSquaredError()
+    toml_data = extract_toml(experiment)
+    
+    if toml_data['method']=='hyp':
+        e_sz = toml_data['e_sz']
+        f_sz = toml_data['f_sz']
+    else:
+        e_sz = None
+        f_sz = None
+        
+    log_dir = get_log_dir(experiment)
+    
+    model = rlf(batch_size,maps,method=toml_data['method'],e_sz=e_sz,f_sz=f_sz,lr=1e-4)
+    callbacks = [keras.callbacks.TensorBoard(log_dir, update_freq=1)]
+
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(1e-4),
+        loss=loss_fn,
+        metrics=[loss_fn], run_eagerly=eager
+    )
+    model.build([(batch_size),(batch_size, 4),(batch_size, 2)])
+
+    if load:
+        model.load_weights(log_dir + 'model/weights').expect_partial()
+
+
+    return model
+
 
 
 class rlf(keras.Model):
 
-	def __init__(self,e_sz,f_sz,BATCH_SIZE,maps,method=1,lr=1e-4,classification=False,writer=None):
+	def __init__(self,BATCH_SIZE,maps,method='hyp',lr=1e-4,e_sz=None,f_sz=None,classification=False,writer=None):
 	
 		self.BATCH_SIZE = BATCH_SIZE
 		self.classification = classification
 		super(rlf, self).__init__()
 		self.maps = maps
-		self.use_conv = False
+		self.use_conv = True
 
-
-		self.e_sz = e_sz
-		self.f_sz = f_sz
+		self.decay = L2(1e-5)
 		
-		self.bottleneck_sz = 32
+		self.bottleneck_sz = 128
 		
-		self.e_total = self.total_func_size(2,self.e_sz)
-		self.f_total = self.total_func_size(2*self.e_sz[-1],self.f_sz)
 		
 		self.writer = writer
 		
 		self._create_encoder()
-		if method==1:
+		
+		if method=='hyp':
 			self.hypernet = True
+			
+			assert f_sz!=None and e_sz!=None
+			
+			self.e_sz = e_sz
+			self.f_sz = f_sz
+			#self.e_total = self.total_func_size(2,self.e_sz)
+			self.f_total = self.total_func_size(4,self.f_sz)
+			
 			self._create_hypernet()
 		else:
 			self.hypernet = False
@@ -49,34 +88,29 @@ class rlf(keras.Model):
 			in_dim = out_dim
 		return total_size
 		
-		
-	def forward_pass(self, inputs):
+	def forward_pass(self, inputs, training=False):
 		[indices, states, _] = inputs
-		maps = tf.gather(self.maps, tf.cast(indices, tf.int32), axis=0)
-
-		maps = tf.transpose(maps,[0,2,3,1])
-		maps = tf.cast(maps,tf.float32)
 		
 		S = tf.slice(states,[0,0],[-1,2])
 		G = tf.slice(states,[0,2],[-1,2])
 		
 		if self.hypernet:
-			theta_e, theta_f = self.get_theta(maps)
+			theta_f = self.get_theta(indices, training=training)
 			
-			e_s = self.func_theta(S,theta_e,self.e_sz,2)
-			e_g = self.func_theta(G,theta_e,self.e_sz,2)
+			#e_s = self.func_theta(S,theta_e,self.e_sz,2)
+			#e_g = self.func_theta(G,theta_e,self.e_sz,2)
 		
-			func_in = tf.concat([e_s,e_g],axis=-1)
-			theta = self.func_theta(func_in,theta_f,self.f_sz,2*self.e_sz[-1])
+			#func_in = tf.concat([e_s,e_g],axis=-1)
+			theta = self.func_theta(states,theta_f,self.f_sz,4)
 		else:
-			z = self.encode(maps)
-			e_s = self.embed(S,z)
-			e_g = self.embed(G,z)
+			z = self.encode(indices, training=training)
+			#e_s = self.embed(S,z)
+			#e_g = self.embed(G,z)
 			
-			theta = self.get_angle(e_s,e_g)
+			theta = self.get_angle(S,G,z)
 		
-		self.embedding = e_s
-		self.states = S
+		#self.embedding = e_s
+		#self.states = S
 		
 		x = tf.math.sin(theta)
 		y = tf.math.cos(theta)
@@ -149,29 +183,63 @@ class rlf(keras.Model):
 			self.fc2 = tf.keras.layers.Dense(128,activation=tf.nn.leaky_relu,name='fc2')
 			self.fc3 = tf.keras.layers.Dense(128,activation=tf.nn.leaky_relu,name='fc3')
 		self.bottleneck = tf.keras.layers.Dense(self.bottleneck_sz,activation=None,name='bottleneck')
+		self.norm1 = tf.keras.layers.BatchNormalization()
 			
 	
 	def _create_embedding(self):
 	
-		self.emb1 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='emb1')
-		self.emb2 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='emb2')
-		self.emb3 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='emb3')
-		self.emb4 = tf.keras.layers.Dense(16,activation=None,name='emb4')
+		#self.emb1 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='emb1')
+		#self.emb2 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='emb2')
+		#self.emb3 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='emb3')
+		#self.emb4 = tf.keras.layers.Dense(16,activation=None,name='emb4')
 		
 		self.angle1 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='angle1')
 		self.angle2 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='angle2')
 		self.angle3 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='angle3')
-		self.angle4 = tf.keras.layers.Dense(1,activation=None,name='angle4')
+		self.angle4 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='angle4')
+		self.angle5 = tf.keras.layers.Dense(1,activation=None,name='angle5')
 		
 	
 	def _create_hypernet(self):
-	
-		self.e_dec = tf.keras.layers.Dense(self.e_total,name='e_dec',kernel_initializer=keras.initializers.RandomNormal(stddev=1e-5))
-		self.f_dec = tf.keras.layers.Dense(self.f_total,name='f_dec',kernel_initializer=keras.initializers.RandomNormal(stddev=1e-5))
+		'''
+		self.eW = []
+		self.eb = []
+		fanin = 2
 		
+		
+		for i in range(len(self.e_sz)):
+			relu = i<len(self.e_sz)-1
+			eWi = tf.keras.layers.Dense(fanin*self.e_sz[i],name='eW'+str(i+1),kernel_regularizer=self.decay,kernel_initializer=hyperfanin_for_kernel(fanin,relu=relu))
+			ebi = tf.keras.layers.Dense(1*self.e_sz[i],name='eb'+str(i+1),kernel_regularizer=self.decay,kernel_initializer=hyperfanin_for_bias(relu=relu))
+			
+			self.eW += [eWi]
+			self.eb += [ebi]
+			fanin = self.e_sz[i]
+		'''
+			
+			
+		self.fW = []
+		self.fb = []
+		fanin = 4#self.e_sz[-1]
+		
+		for i in range(len(self.f_sz)):
+			relu = i<len(self.e_sz)-1
+			fWi = tf.keras.layers.Dense(fanin*self.f_sz[i],name='fW'+str(i+1),kernel_regularizer=self.decay,kernel_initializer=hyperfanin_for_kernel(fanin,relu=relu))
+			fbi = tf.keras.layers.Dense(1*self.f_sz[i],name='fb'+str(i+1),kernel_regularizer=self.decay,kernel_initializer=hyperfanin_for_bias(relu=relu))
+			
+			self.fW += [fWi]
+			self.fb += [fbi]
+			fanin = self.f_sz[i]
+			
+		
+	def encode(self,indices,training=False):
 	
-	def encode(self,I):
-	
+		I = tf.gather(self.maps, tf.cast(indices, tf.int32), axis=0)
+
+		I = tf.transpose(I,[0,2,3,1])
+		I = tf.cast(I,tf.float32)
+		
+		
 		if self.use_conv:
 			h1 = self.conv1(I)
 			h1 += self.conv11(h1) + self.conv12(h1)
@@ -183,32 +251,49 @@ class rlf(keras.Model):
 			h3 += self.conv31(h3) + self.conv32(h3)
 
 			z = self.flat1(h3)
-
-			z = tf.concat([z,G],axis=-1)
 			z = self.fc1(z)
 		else:
 			z = self.fc3(self.fc2(self.fc1(self.flat1(I))))
+		z = self.norm1(z)
 		z = self.bottleneck(z)
+		self.z = z
 		return z
 		
-	def embed(self,x,z):
-		emb_in = tf.concat([x,z],axis=-1)
-		return self.emb4(self.emb3(self.emb2(self.emb1(emb_in))))
+	#def embed(self,x,z):
+	#	emb_in = tf.concat([x,z],axis=-1)
+	#	return self.emb4(self.emb3(self.emb2(self.emb1(emb_in))))
 		
-	def get_angle(self,e_s,e_g):
-		angle_in = tf.concat([e_s,e_g],axis=-1)
-		return self.angle4(self.angle3(self.angle2(self.angle1(angle_in))))
+	def get_angle(self,s,g,z):
+		angle_in = tf.concat([s,g,z],axis=-1)
+		return self.angle5(self.angle4(self.angle3(self.angle2(self.angle1(angle_in)))))
 		
-	def get_theta(self,I):
+	def get_theta(self,I,training=False):
 
-		z = self.encode(I)
+		z = self.encode(I,training=training)
 		
-		self.hyperembedding = z
 
-		theta_e = self.e_dec(z)
-		theta_f = self.f_dec(z)
+		'''
+		theta_e = []
 		
-		return theta_e, theta_f
+		for i in range(len(self.e_sz)):
+			eWi = self.eW[i](z)
+			ebi = self.eb[i](z)
+			
+			theta_e += [tf.concat([eWi,ebi],axis=-1)]
+		theta_e = tf.concat(theta_e,axis=-1)
+		'''
+		
+		
+		theta_f = []
+		
+		for i in range(len(self.f_sz)):
+			fWi = self.fW[i](z)
+			fbi = self.fb[i](z)
+			
+			theta_f += [tf.concat([fWi,fbi],axis=-1)]
+		theta_f = tf.concat(theta_f,axis=-1)
+		
+		return theta_f
 
 
 	def get_vars(self):
@@ -222,7 +307,7 @@ class rlf(keras.Model):
 	def train_step(self, inputs):
 		with tf.GradientTape(persistent=False) as tape:
 		
-			pred = self.forward_pass(inputs)
+			pred = self.forward_pass(inputs, training=True)
 			
 			loss = self.compiled_loss(inputs[-1], pred)
 			
@@ -242,7 +327,7 @@ class rlf(keras.Model):
 	
 	
 	def test_step(self, inputs):
-		pred = self.forward_pass(inputs)
+		pred = self.forward_pass(inputs, training=False)
 		self.compiled_metrics.update_state(inputs[-1], pred)
 
 		return {m.name: m.result() for m in self.metrics}

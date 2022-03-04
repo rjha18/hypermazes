@@ -160,7 +160,7 @@ class gridworld_env(tk.Tk):
 			
 					
 		self.graph = nx.from_numpy_matrix(self.A)
-		
+		#self.shortest_paths = nx.all_pairs_shortest_path_length(self.graph)
 		'''
 		pos = np.fliplr(self.states)
 		node_sizes = [3,]*756
@@ -384,8 +384,8 @@ class gridworld_env(tk.Tk):
 			V = V / (1e-16+(U**2 + V**2) ** 0.5)
 
 			plt.quiver(U,V,pivot="middle")
-		if self.display:
-			plt.show()
+		#if self.display:
+		#	plt.show()
 		if fnm:
 			plt.savefig(fnm)
 

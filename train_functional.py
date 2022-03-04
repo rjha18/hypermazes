@@ -6,7 +6,7 @@ from tensorflow import keras
 import tensorflow as tf
 import argparse
 
-from model import rlf
+from model import rlf, setup_model
 from utils import has_splits, get_log_dir, extract_toml
 from data_utils import generate_train_val, gen_splits, inspect_settings
 
@@ -26,8 +26,6 @@ INSPECT = args.inspect
 
 
 # Initialize training parameters
-e_sz = [64,64,16]
-f_sz = [32,32,1]
 batch_size = 128
 
 
@@ -54,28 +52,15 @@ callbacks = [keras.callbacks.TensorBoard(log_dir, update_freq=1)]
 
 toml_data = extract_toml(EXPERIMENT)
 
-model = rlf(e_sz,f_sz,batch_size,maps,method=toml_data['hypernet'],lr=1e-4,writer=writer)
-model.build([(batch_size),(batch_size, 4),(batch_size, 2)])
-
-print(model.summary())
-
-if LOAD_MODEL:
-	model.load_weights(log_dir + 'model/weights')\
-		 .expect_partial()
-
-
-loss_fn = tf.keras.losses.MeanSquaredError()
-model.compile(
-	optimizer=keras.optimizers.Adam(1e-5),
-	loss=loss_fn,
-	metrics=[loss_fn]
-)
+model = setup_model(EXPERIMENT,batch_size,maps,load=LOAD_MODEL);
+model.summary()
 
 
 # Train model
 model.fit(
 	train_dataset,
 	validation_data = val_dataset,
+	validation_freq = 1,
 	callbacks = callbacks,
 	epochs = EPOCHS,
 	verbose = 1
