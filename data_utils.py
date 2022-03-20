@@ -80,7 +80,6 @@ def generate_train_val(experiment, batch_size):
 def generate_dataset_from_splits(experiment, split, batch_size, map_offset=0):
     experiment_data = extract_toml(experiment)
     data_dir = experiment_data['data_dir']
-    use_val = experiment_data['use_val']
     base_data = np.array(pd.read_csv(experiment_data['base_fnm'], header=None, delimiter=' '));
     door_data = np.array(pd.read_csv(experiment_data['doors_fnm'], header=None, delimiter=' '));
     
@@ -110,13 +109,12 @@ def generate_dataset_from_splits(experiment, split, batch_size, map_offset=0):
             plt.show()
         '''
     
-        datasets.append(create_batch_dataset(map_states, Q, batch_size, map_offset + i, states,use_val=use_val))
+        datasets.append(create_batch_dataset(map_states, Q, batch_size, map_offset + i, states))
     return tf.data.experimental.sample_from_datasets(datasets), tf.convert_to_tensor(maps)
 
 
 def generate_dataset_from_target(experiment, target, combination):
     experiment_data = extract_toml(experiment)
-    use_val = experiment_data['use_val']
     base_data = np.array(pd.read_csv(experiment_data['base_fnm'], header=None, delimiter=' '));
     door_data = np.array(pd.read_csv(experiment_data['doors_fnm'], header=None, delimiter=' '));
 
@@ -125,7 +123,7 @@ def generate_dataset_from_target(experiment, target, combination):
     Q_fnm = experiment_data['Q_fnms'].replace('*', fnm_from_combination(combination))
     Q = np.load(Q_fnm)
     maps = tf.convert_to_tensor([np.stack([map_data, map_data - base_data])])
-    dataset = create_target_dataset(map_states,Q,target,use_val=use_val)
+    dataset = create_target_dataset(map_states,Q,target)
     return dataset, maps, Q, map_data
 
 
@@ -149,35 +147,18 @@ def compute_Q_sin_cos(Q):
     return Q_new
 
 
-def create_target_dataset(map_states,Q,target,use_val=False):
+def create_target_dataset(map_states,Q,target):
     normalized_map_states = normalize_states(map_states,scale=4.0)
     S = normalized_map_states[np.arange(len(normalized_map_states))]
     G = normalized_map_states[(np.ones(len(normalized_map_states)) * target).astype(np.int32)]
     grid = np.concatenate([S,G], axis=-1)
     Q = Q[target]
     
-    '''
-    print(target)
-    world = np.zeros((31,31))-1
-    
-    for j in range(len(map_states)):
-        state = map_states[j]
-        x = state[0].astype(int)
-        y = state[1].astype(int)
-        world[x,y] = 10*Q[j]
-    plt.subplot(1,1,1)
-    plt.imshow(world)
-    plt.colorbar()
-    plt.show()
-    '''
-    
-    if not use_val:
-        #Q = compute_Q_sin_cos(Q)
-        levels = np.unique(Q)
-        
-        for i in range(len(levels)):
-            idx = np.where(Q==levels[i])
-            Q[idx] = i
+    levels = np.unique(Q)
+
+    for i in range(len(levels)):
+        idx = np.where(Q==levels[i])
+        Q[idx] = i
     
     maps = np.ones(grid.shape[0]) * 0
 
@@ -189,7 +170,7 @@ def normalize_states(x,scale=1.0):
     H = 29#np.max(x,axis=0,keepdims=True)
     return scale*(x-L)/(H-L)
 
-def create_batch_dataset(map_states,Q,batch_size,index,indices,use_val=False):
+def create_batch_dataset(map_states,Q,batch_size,index,indices):
     idx_s = np.arange(map_states.shape[0])
     
     normalized_map_states = normalize_states(map_states,scale=4.0)
@@ -205,13 +186,12 @@ def create_batch_dataset(map_states,Q,batch_size,index,indices,use_val=False):
     idx = np.random.permutation(grid.shape[0])
     grid = grid[idx]
     Q = Q[indices].reshape([-1,])[idx]
-    if not use_val:
-        #Q = compute_Q_sin_cos(Q)
-        levels = np.unique(Q)
-        
-        for i in range(len(levels)):
-            idx = np.where(Q==levels[i])
-            Q[idx] = i
+   
+    levels = np.unique(Q)
+    
+    for i in range(len(levels)):
+        idx = np.where(Q==levels[i])
+        Q[idx] = i
     maps = np.ones(grid.shape[0]) * index
 
     return tf.data.Dataset.from_tensor_slices((maps, grid, Q)).batch(batch_size,drop_remainder=True)

@@ -24,7 +24,7 @@ parser.add_argument('--combination', help="combination to examine", nargs=3, def
 parser.add_argument('--comb_split', help="combination split to sample", default=None, type=str)
 parser.add_argument('--visualize', help="visualize policy", default=0, type=int)
 parser.add_argument('--target_split', help="state split to sample", default='test', type=str)
-parser.add_argument('--max_test_combos', help="maximum combinations used for testing", default=10, type=int)
+parser.add_argument('--max_test_combos', help="maximum combinations used for testing", default=50, type=int)
 
 args = parser.parse_args()
 EXPERIMENT = args.experiment
@@ -125,23 +125,15 @@ for combo in COMBINATIONS:
 
         BATCH = next(iter(dataset))
 
-        if model.use_val:
-            vals = model.forward_pass(next(iter(dataset)),training=False).numpy()
-            angle_idx = get_policy(env,TARGET,vals)
-            angles = angle_idx*np.pi/4
-            sines_cosines = np.zeros((756,2))
-            sines_cosines[:,0] = np.sin(angles)
-            sines_cosines[:,1] = np.cos(angles)
-        else:
-            sines_cosines = model.forward_pass(next(iter(dataset)),training=False).numpy()
-            angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
-            ANGLES = np.arange(8)*np.pi/4
-            angles = ANGLES[np.argmax(sines_cosines,axis=-1)]
-            sines_cosines = np.zeros((756,2))
-            sines_cosines[:,0] = np.sin(angles)
-            sines_cosines[:,1] = np.cos(angles)
-            sines_cosines, angles, angle_idx = quantize_angles(sines_cosines, angles)
-        
+        sines_cosines = model.forward_pass(next(iter(dataset)),training=False).numpy()
+        angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
+        ANGLES = np.arange(8)*np.pi/4
+        angles = ANGLES[np.argmax(sines_cosines,axis=-1)]
+        sines_cosines = np.zeros((756,2))
+        sines_cosines[:,0] = np.sin(angles)
+        sines_cosines[:,1] = np.cos(angles)
+        sines_cosines, angles, angle_idx = quantize_angles(sines_cosines, angles)
+    
         
         
         
