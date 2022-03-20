@@ -43,18 +43,8 @@ class start_is_goal(init_error):
 
 class gridworld_env(tk.Tk):
 
-	def __init__(self,fnm=None,step_penalty=-0.01,goal_reward=1.0,display=True,gamma=0.99):
-		try:
-			fp = open(fnm, 'r')
-			fp.close()
-		except OSError:
-			print("Map file cannot be opened.")
-			raise OSError()
-			
-		map_data = np.array(pd.read_csv(fnm,header=None,delimiter=' '));
-		gridworld_env(map_data, step_penalty, goal_reward, display, gamma)
 
-	def __init__(self,map_data,step_penalty=-0.01,goal_reward=1.0,display=True,gamma=0.99):
+	def __init__(self,map_data,step_penalty=0.01,goal_reward=1.0,display=True,gamma=0.99):
 		self.map_data = map_data
 
 		if np.isnan(self.map_data).any():
@@ -345,6 +335,25 @@ class gridworld_env(tk.Tk):
 			if verbosity != 0 and i % verbosity == 0:
 				print(f"Finished round {i}")
 		return np.array(Q)
+		
+		
+		
+	def generate_V(self, verbosity=0):
+		V = []
+		for i in range(len(self.states)):
+			goal_state = self.states[i]
+			vals = []
+			
+			for j in range(len(self.states)):
+				curr_state = self.states[j]
+				vals.append(self.q_value_by_state(curr_state,goal_state))
+			V.append(vals)
+			if verbosity != 0 and i % verbosity == 0:
+				print(f"Finished round {i}")
+		V = np.array(V).reshape([len(self.states),len(self.states)])
+		
+		return V
+		
 	
 	def plot_results(self, results, results_raw, goal, fnm=None, random=False, target_num=8, wall_num=-1 ,display_arrows=True):
 		if random:
@@ -384,8 +393,8 @@ class gridworld_env(tk.Tk):
 			V = V / (1e-16+(U**2 + V**2) ** 0.5)
 
 			plt.quiver(U,V,pivot="middle")
-		#if self.display:
-		#	plt.show()
+		if self.display:
+			plt.show()
 		if fnm:
 			plt.savefig(fnm)
 

@@ -11,7 +11,7 @@ import time
 import networkx as nx
 
 from model import rlf, setup_model
-from utils import get_Q_fnms, fnm_from_combination, get_log_dir, get_data_dir, quantize_angles, directions, extract_toml, viz_policy
+from utils import get_Q_fnms, fnm_from_combination, get_log_dir, get_data_dir, quantize_angles, directions, extract_toml, viz_policy, get_policy
 from environment import gridworld_env
 from data_utils import generate_dataset_from_target
 
@@ -24,7 +24,7 @@ parser.add_argument('--combination', help="combination to examine", nargs=3, def
 parser.add_argument('--comb_split', help="combination split to sample", default=None, type=str)
 parser.add_argument('--visualize', help="visualize policy", default=0, type=int)
 parser.add_argument('--target_split', help="state split to sample", default='test', type=str)
-parser.add_argument('--max_test_combos', help="maximum combinations used for testing", default=20, type=int)
+parser.add_argument('--max_test_combos', help="maximum combinations used for testing", default=10, type=int)
 
 args = parser.parse_args()
 EXPERIMENT = args.experiment
@@ -100,10 +100,10 @@ for combo in COMBINATIONS:
 
     t = time.time()
     
-    if counter==0:
-        model = setup_model(EXPERIMENT,batch_size,maps,load=True,eager=True);
-    else:
-        model.maps = maps
+    #if counter==0:
+    model = setup_model(EXPERIMENT,batch_size,maps,load=True,eager=True);
+    #else:
+    #    model.maps = maps
     elapsed = time.time() - t
         
     print(counter)
@@ -125,11 +125,29 @@ for combo in COMBINATIONS:
 
         BATCH = next(iter(dataset))
 
-        sines_cosines = model.forward_pass(next(iter(dataset)),training=False).numpy()
-        angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
+        if model.use_val:
+            vals = model.forward_pass(next(iter(dataset)),training=False).numpy()
+            angle_idx = get_policy(env,TARGET,vals)
+            angles = angle_idx*np.pi/4
+            sines_cosines = np.zeros((756,2))
+            sines_cosines[:,0] = np.sin(angles)
+            sines_cosines[:,1] = np.cos(angles)
+        else:
+            sines_cosines = model.forward_pass(next(iter(dataset)),training=False).numpy()
+            angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
+            ANGLES = np.arange(8)*np.pi/4
+            angles = ANGLES[np.argmax(sines_cosines,axis=-1)]
+            sines_cosines = np.zeros((756,2))
+            sines_cosines[:,0] = np.sin(angles)
+            sines_cosines[:,1] = np.cos(angles)
+            sines_cosines, angles, angle_idx = quantize_angles(sines_cosines, angles)
+        
+        
+        
         
         Z += [model.z[0]]
-        sines_cosines, angles, angle_idx = quantize_angles(sines_cosines, angles)
+        
+        
         A = np.zeros((756,756))
         
         for u in range(756):

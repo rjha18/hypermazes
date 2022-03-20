@@ -24,6 +24,52 @@ directions = {
 
 
 
+def get_policy(env,target,vals):
+    states = env.states
+    map_data = env.map_data
+    
+    policy = np.zeros(vals.shape)
+    
+    print(vals.shape)
+    
+    for i in range(states.shape[0]):
+        state = states[i]
+        #print(state)
+        val_i = [];
+        
+        for j in directions.keys():
+        
+            delta = directions[j]
+            delta = np.array(delta).reshape([1,2])
+            delta = np.fliplr(delta)
+            next = state + delta
+            next = next.astype(int)
+            
+            #print(next)
+            if map_data[next[0,0],next[0,1]]==1:
+                val_i.append(-100)
+                #print('wall')
+                #input()
+            else:
+                next_key = env.state_to_key(next);
+                next_idx = env.state_lookup[next_key]
+                
+                #print(next_idx)
+                #input()
+                val_ij = vals[next_idx]
+                val_i.append(val_ij)
+        val_i = np.array(val_i)
+        star = np.argmax(val_i)
+        policy[i] = star;
+        
+        
+        
+        #print(val_i)
+        #print(star)
+        #print(policy)
+        #input()
+    return policy.reshape([-1])  
+
 
 def viz_policy(target,map_data,graph,states,g_component=None):
     
