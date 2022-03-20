@@ -8,12 +8,8 @@ from tensorflow.keras.regularizers import L2
 def setup_model(experiment,batch_size,maps,load=False,eager=False):
 
     toml_data = extract_toml(experiment)
-    use_val = toml_data['use_val']
 
-    if use_val:
-        loss_fn = tf.keras.losses.MeanSquaredError()
-    else:
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy()
+    loss_fn = tf.keras.losses.SparseCategoricalCrossentropy()
     
     if toml_data['method']=='hyp':
         f_sz = toml_data['f_sz']
@@ -22,7 +18,7 @@ def setup_model(experiment,batch_size,maps,load=False,eager=False):
         
     log_dir = get_log_dir(experiment)
     
-    model = rlf(batch_size,maps,method=toml_data['method'],use_val=use_val,f_sz=f_sz,lr=1e-4)
+    model = rlf(batch_size,maps,method=toml_data['method'],f_sz=f_sz,lr=1e-4)
     callbacks = [keras.callbacks.TensorBoard(log_dir, update_freq=1)]
 
 
@@ -31,10 +27,7 @@ def setup_model(experiment,batch_size,maps,load=False,eager=False):
         loss=loss_fn,
         metrics=[loss_fn], run_eagerly=eager
     )
-    if use_val:
-	    model.build([(batch_size),(batch_size, 4),(batch_size, 1)])
-    else:
-	    model.build([(batch_size),(batch_size, 4),(batch_size, 8)])
+    model.build([(batch_size),(batch_size, 4),(batch_size, 8)])
 
     if load:
         model.load_weights(log_dir + 'model/weights').expect_partial()
@@ -46,7 +39,7 @@ def setup_model(experiment,batch_size,maps,load=False,eager=False):
 
 class rlf(keras.Model):
 
-	def __init__(self,BATCH_SIZE,maps,method='hyp',lr=1e-4,use_val=True,f_sz=None,classification=False,writer=None):
+	def __init__(self,BATCH_SIZE,maps,method='hyp',lr=1e-4,f_sz=None,classification=False,writer=None):
 	
 		self.BATCH_SIZE = BATCH_SIZE
 		self.classification = classification
@@ -55,7 +48,6 @@ class rlf(keras.Model):
 		self.use_conv = False
 
 		
-		self.use_val = use_val
 		
 		self.bottleneck_sz = 128
 		
@@ -106,19 +98,11 @@ class rlf(keras.Model):
 		if self.hypernet:
 			theta_f = self.get_theta(indices, training=training)
 			
-			if self.use_val:
-				y = self.func_theta(states,theta_f,self.f_sz,4)
-				#e_g = self.func_theta(G,theta_f,self.f_sz,2)
-				#y = tf.reduce_sum(e_s*e_g,axis=-1,keepdims=True)
-			else:
-				theta = self.func_theta(states,theta_f,self.f_sz,4)
-				y = tf.nn.softmax(theta)
+			theta = self.func_theta(states,theta_f,self.f_sz,4)
 		else:
 			z = self.encode(indices, training=training)
-			y = self.get_output(S,G,z, training=training)
-			
-			if not self.use_val:
-				y = tf.nn.softmax(y)
+			theta = self.get_output(S,G,z, training=training)
+		y = tf.nn.softmax(theta)
 		
 		return y	
 		
@@ -197,9 +181,6 @@ class rlf(keras.Model):
 	def _create_embedding(self):
 
 		out_dim = 8
-		
-		if self.use_val:
-			out_dim = 1;
 		
 		self.angle1 = tf.keras.layers.Dense(256,activation=None,name='angle1')
 		self.angle2 = tf.keras.layers.Dense(256,activation=None,name='angle2')
