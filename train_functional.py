@@ -44,7 +44,15 @@ train_dataset, val_dataset, maps = generate_train_val(EXPERIMENT, batch_size)
 # Initialize model saving
 log_dir = get_log_dir(EXPERIMENT)
 writer = tf.summary.create_file_writer(log_dir)
-callbacks = [keras.callbacks.TensorBoard(log_dir, update_freq=1)]
+
+
+writer = keras.callbacks.TensorBoard(log_dir, update_freq=1)
+early = tf.keras.callbacks.EarlyStopping(monitor="val_sparse_categorical_accuracy",
+        patience=5,
+        verbose=0,
+        restore_best_weights=True
+)
+callbacks = [writer, early]
 
 
 # Initialize, build, and compile model
