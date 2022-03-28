@@ -66,6 +66,7 @@ class gridworld_env(tk.Tk):
 		
 		self.states = np.zeros((0,2));
 		self.blocked = np.zeros((0,2));
+		self.blocked_idx = [];
 		
 		self.valid_values = set((0,1));
 		
@@ -127,7 +128,9 @@ class gridworld_env(tk.Tk):
 						
 				else:
 					self.blocked = np.concatenate([self.blocked,state.reshape([1,2])],axis=0);
+					self.blocked_idx += [h*self.W + w]
 
+		self.blocked_idx = np.array(self.blocked_idx)
 		self.num_states = self.states.shape[0];
 		self.num_actions = len(valid_actions);
 		self.state_sz = 2;

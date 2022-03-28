@@ -48,7 +48,7 @@ writer = tf.summary.create_file_writer(log_dir)
 
 writer = keras.callbacks.TensorBoard(log_dir, update_freq=1)
 early = tf.keras.callbacks.EarlyStopping(monitor="val_sparse_categorical_accuracy",
-        patience=5,
+        patience=10,
         verbose=0,
         restore_best_weights=True
 )

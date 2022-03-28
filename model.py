@@ -19,16 +19,21 @@ def setup_model(experiment,batch_size,maps,load=False,eager=False):
         
     log_dir = get_log_dir(experiment)
     
-    model = rlf(batch_size,maps,method=toml_data['method'],f_sz=f_sz,lr=1e-4)
+    out_num = 8
+    
+    if toml_data['walls']:
+        out_num += 1
+    
+    model = rlf(batch_size,maps,toml_data['use_conv'],out_num,method=toml_data['method'],f_sz=f_sz)
     
 
 
     model.compile(
-        optimizer=keras.optimizers.Adam(1e-5),
+        optimizer=keras.optimizers.Adam(1e-4),
         loss=loss_fn,
         metrics=[metric_fn], run_eagerly=eager
     )
-    model.build([(batch_size),(batch_size, 4),(batch_size, 8)])
+    model.build([(batch_size),(batch_size, 4),(batch_size, out_num)])
 
     if load:
         model.load_weights(log_dir + 'model/weights').expect_partial()
@@ -40,15 +45,15 @@ def setup_model(experiment,batch_size,maps,load=False,eager=False):
 
 class rlf(keras.Model):
 
-    def __init__(self,BATCH_SIZE,maps,method='hyp',lr=1e-4,f_sz=None,classification=False,writer=None):
+    def __init__(self,BATCH_SIZE,maps,use_conv,out_num,method='hyp',lr=1e-4,f_sz=None,classification=False,writer=None):
     
         self.BATCH_SIZE = BATCH_SIZE
         self.classification = classification
         super(rlf, self).__init__()
         self.maps = maps
-        self.use_conv = True
+        self.use_conv = use_conv
+        self.out_num = out_num
 
-        
         
         self.bottleneck_sz = 128
         
@@ -69,13 +74,12 @@ class rlf(keras.Model):
             
             self._create_hypernet()
         else:
-            self.decay_rate = 1e-4
+            self.decay_rate = 1e-5
             self.decay = L2(self.decay_rate)
             self.hypernet = False
             self._create_embedding()
             
         
-        self.angle_num = 8;
 
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr);
         if self.classification:
@@ -90,22 +94,27 @@ class rlf(keras.Model):
             in_dim = out_dim
         return total_size
         
+        
+        
     def forward_pass(self, inputs, training=False):
         [indices, states, _] = inputs
+        
+        states = tf.cast(states,tf.float32)
         
         S = tf.slice(states,[0,0],[-1,2])
         G = tf.slice(states,[0,2],[-1,2])
         
+        
+        
         if self.hypernet:
-            theta_f = self.get_theta(indices, training=training)
+            theta_f = self.get_theta(indices)
             
             theta = self.func_theta(states,theta_f,self.f_sz,4)
         else:
-            z = self.encode(indices, training=training)
-            theta = self.get_output(S,G,z, training=training)
+            z = self.encode(indices)
+            theta = self.get_output(S,G,z)
         y = tf.nn.softmax(theta)
         
-        #self.fI_hat = self.decode(self.z)
         return y    
         
 
@@ -144,8 +153,11 @@ class rlf(keras.Model):
             
     
     def _create_encoder(self):
+    
+    
         if self.use_conv:
-            base_sz = 8
+            base_sz = 16
+            self.conv0 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=None, padding='same',name='conv0')
             self.conv1 = tf.keras.layers.Conv2D(base_sz, [5,5], strides=(2, 2), activation=tf.nn.leaky_relu, padding='same',name='conv1')
             self.conv11 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=tf.nn.leaky_relu, padding='same',name='conv11')
             self.conv12 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=tf.nn.leaky_relu, padding='same',name='conv12')
@@ -166,54 +178,27 @@ class rlf(keras.Model):
             self.conv42 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=tf.nn.leaky_relu, padding='same',name='conv42')        
             
             self.flat1 = tf.keras.layers.Flatten()
-            self.fc1 = tf.keras.layers.Dense(128,activation=tf.nn.leaky_relu,name='fc1')
+            self.fc1 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='fc1')
         else:
             self.flat1 = tf.keras.layers.Flatten()
-            self.fc1 = tf.keras.layers.Dense(256,activation=None,name='fc1')
-            self.fc2 = tf.keras.layers.Dense(256,activation=None,name='fc2')
-            self.fc3 = tf.keras.layers.Dense(256,activation=None,name='fc3')
+            self.fc1 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='fc1')
+            self.fc2 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='fc2')
+            self.fc3 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='fc3')
         self.bottleneck = tf.keras.layers.Dense(self.bottleneck_sz,activation=None,name='bottleneck')
         self.norm1 = tf.keras.layers.LayerNormalization()
-        self.norm2 = tf.keras.layers.LayerNormalization()
 
-        #self.dc1 = tf.keras.layers.Dense(256,activation=None,name='dc1')
-        #self.dc2 = tf.keras.layers.Dense(256,activation=None,name='dc2')
-        #self.dc3 = tf.keras.layers.Dense(31*31*2,activation=None,name='dc3')
+        # idea: topo-normalization. Layer normalization has spherical topology. What about other topologies.
 
-            
-    def decode(self,z):
-        fI = self.dc1(z)
-        fI = tf.nn.leaky_relu(fI)
-        fI = self.dc2(fI)
-        fI = tf.nn.leaky_relu(fI)
-        fI = self.dc3(fI)
-        fI = tf.nn.leaky_relu(fI)
-        return fI;
     def _create_embedding(self):
-
-        out_dim = 8
-        
-        self.angle1 = tf.keras.layers.Dense(256,activation=None,name='angle1')
-        self.angle2 = tf.keras.layers.Dense(256,activation=None,name='angle2')
-        self.angle3 = tf.keras.layers.Dense(256,activation=None,name='angle3')
-        self.angle4 = tf.keras.layers.Dense(256,activation=None,name='angle4')
-        self.angle5 = tf.keras.layers.Dense(out_dim,activation=None,name='angle5')
-        
-        '''
-        self.bn1 = tf.keras.layers.LayerNormalization()
-        self.bn2 = tf.keras.layers.LayerNormalization()
-        self.bn3 = tf.keras.layers.LayerNormalization()
-        self.bn4 = tf.keras.layers.LayerNormalization()
-        self.bn5 = tf.keras.layers.LayerNormalization()
-        '''
+        self.angle1 = tf.keras.layers.Dense(256,activation=tf.nn.leaky_relu,name='angle1')
+        self.angle2 = tf.keras.layers.Dense(512,activation=tf.nn.leaky_relu,name='angle2')
+        self.angle3 = tf.keras.layers.Dense(512,activation=tf.nn.leaky_relu,name='angle3')
+        self.angle4 = tf.keras.layers.Dense(512,activation=tf.nn.leaky_relu,name='angle4')
+        self.angle5 = tf.keras.layers.Dense(self.out_num,activation=None,name='angle5')
         
         
     
     def _create_hypernet(self):
-            
-        #self.hyp1 = tf.keras.layers.Dense(128,activation=tf.nn.leaky_relu,name='hyp1')
-        #self.hyp2 = tf.keras.layers.Dense(128,activation=tf.nn.leaky_relu,name='hyp2')
-        #self.hyp3 = tf.keras.layers.Dense(256,activation=None,name='hyp3')
             
         self.fW = []
         self.fb = []
@@ -228,17 +213,18 @@ class rlf(keras.Model):
             self.fb += [fbi]
             fanin = self.f_sz[i]
         
-    def encode(self,indices,training=False):
+    def encode(self,indices):
     
         I = tf.gather(self.maps, tf.cast(indices, tf.int32), axis=0)
 
         I = tf.transpose(I,[0,2,3,1])
-        #I = tf.slice(I,[0,0,0,1],[-1,-1,-1,1])
         I = tf.cast(I,tf.float32)
         
         
         if self.use_conv:
-            h1 = self.conv1(I)
+            h0 = self.conv0(I)
+            
+            h1 = self.conv1(h0)
             h1 += self.conv11(h1) + self.conv12(h1)
             
             h2 = self.conv2(h1)
@@ -249,7 +235,6 @@ class rlf(keras.Model):
             
             h4 = self.conv4(h3)
             h4 += self.conv41(h4) + self.conv42(h4)
-            
 
             z = self.flat1(h4)
             z = self.fc1(z)
@@ -258,47 +243,27 @@ class rlf(keras.Model):
             self.fI = z;
             
             z = self.fc1(z)
-            z = tf.nn.leaky_relu(z)
-            #z = self.norm1(z)
-            
             z = self.fc2(z)
-            z = tf.nn.leaky_relu(z)
-            #z = self.norm2(z)
-            
             z = self.fc3(z)
-            z = tf.nn.leaky_relu(z)
             
         z = self.norm1(z)
         z = self.bottleneck(z)
-        z = self.norm2(z)
         self.z = z
         return z
         
-    def get_output(self,s,g,z,training=False):
+    def get_output(self,s,g,z):
         net_in = tf.concat([s,g,z],axis=-1)
         
         y = self.angle1(net_in)
-        y = tf.nn.leaky_relu(y)
-        #y = self.bn1(y)
-        
         y = self.angle2(y)
-        y = tf.nn.leaky_relu(y)
-        #y = self.bn2(y)
-        
         y = self.angle3(y)
-        y = tf.nn.leaky_relu(y)
-        #y = self.bn3(y)
-        
         y = self.angle4(y)
-        y = tf.nn.leaky_relu(y)
-        #y = self.bn4(y)
-        
         y = self.angle5(y)
         
         return y
         
-    def get_theta(self,I,training=False):
-        z = self.encode(I,training=training)
+    def get_theta(self,I):
+        z = self.encode(I)
         
         theta_f = []
         
@@ -326,11 +291,6 @@ class rlf(keras.Model):
             pred = self.forward_pass(inputs, training=True)
             
             loss = self.compiled_loss(inputs[-1], pred)
-            
-            
-            #rec_mse = tf.reduce_mean(tf.reduce_sum(tf.square(self.fI-self.fI_hat),axis=-1))
-            
-            #loss += 1e-3*rec_mse
             
             if self.hypernet:
                 penalty = 0

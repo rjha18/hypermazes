@@ -60,7 +60,7 @@ def get_policy(env,target,vals):
     return policy.reshape([-1])  
 
 
-def viz_policy(target,map_data,graph,states,g_component=None):
+def viz_policy(target,targets,map_data,graph,states,g_component=None):
     
     num_nodes = states.shape[0]
     
@@ -68,9 +68,12 @@ def viz_policy(target,map_data,graph,states,g_component=None):
     node_sizes = np.array([10,]*num_nodes)
     node_color = np.array(["b",]*num_nodes)
 
+    node_color[targets] = 'm'
+
     if g_component is not None:
         node_color[np.array(g_component,dtype=int)] = "g"
     node_color[target] = "r"
+    
         
     #plt.imshow(map_data)
     nodes = nx.draw_networkx_nodes(graph, pos, node_size=node_sizes, node_color=node_color)

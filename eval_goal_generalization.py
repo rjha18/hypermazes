@@ -13,7 +13,7 @@ import networkx as nx
 from model import rlf, setup_model
 from utils import get_Q_fnms, fnm_from_combination, get_log_dir, get_data_dir, quantize_angles, directions, extract_toml, viz_policy, get_policy
 from environment import gridworld_env
-from data_utils import generate_dataset_from_target
+from data_utils import generate_dataset_from_target,generate_train_val,generate_test
 
 import matplotlib.pyplot as plt
 
@@ -24,7 +24,7 @@ parser.add_argument('--combination', help="combination to examine", nargs=3, def
 parser.add_argument('--comb_split', help="combination split to sample", default=None, type=str)
 parser.add_argument('--visualize', help="visualize policy", default=0, type=int)
 parser.add_argument('--target_split', help="state split to sample", default='test', type=str)
-parser.add_argument('--max_test_combos', help="maximum combinations used for testing", default=50, type=int)
+parser.add_argument('--max_test_combos', help="maximum combinations used for testing", default=20, type=int)
 
 args = parser.parse_args()
 EXPERIMENT = args.experiment
@@ -56,6 +56,8 @@ if COMBINATION==None:
     if COMB_SPLIT==None:
         eval_combinations = list(np.load(data_dir + 'test/combinations.npy'))
         eval_combinations = np.array(eval_combinations)
+        
+        # change this for deterministic testing
         eval_combinations = np.random.permutation(eval_combinations)[:MAX_COMBOS]
         
         COMBINATIONS = [tuple(map(int, eval_combination[9:-5].split('_'))) for eval_combination in eval_combinations]
@@ -80,16 +82,27 @@ else:
         exit(-1)
         
         
-num_nodes = 756
-batch_size = num_nodes
+batch_size = 128
 
-accs = []
+'''
+_, val_dataset, maps = generate_train_val(EXPERIMENT, batch_size)
+model = setup_model(EXPERIMENT,batch_size,maps,load=True,eager=True);
+print(model.evaluate(val_dataset))
 
+test_dataset, maps = generate_test(EXPERIMENT, batch_size)
+model = setup_model(EXPERIMENT,batch_size,maps,load=True,eager=True);
+print(model.evaluate(test_dataset))
+
+'''
 
 counter = 0
 targets = list(np.load(data_dir + TARGET_SPLIT + '/states.npy'))
     
+num_nodes = 756
+batch_size = num_nodes
     
+    
+accs = []
 Z = []
     
 
@@ -123,16 +136,26 @@ for combo in COMBINATIONS:
     for TARGET in targets:
         dataset, maps, Q, map_data = generate_dataset_from_target(EXPERIMENT, TARGET, combo)
 
+        print(model.evaluate(dataset))
         BATCH = next(iter(dataset))
 
         sines_cosines = model.forward_pass(next(iter(dataset)),training=False).numpy()
         angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
         ANGLES = np.arange(8)*np.pi/4
-        angles = ANGLES[np.argmax(sines_cosines,axis=-1)]
-        sines_cosines = np.zeros((756,2))
-        sines_cosines[:,0] = np.sin(angles)
-        sines_cosines[:,1] = np.cos(angles)
-        sines_cosines, angles, angle_idx = quantize_angles(sines_cosines, angles)
+        
+        angle_idx = np.argmax(sines_cosines,axis=-1)
+        if model.out_num==9:
+            valid_idx = np.where(angle_idx<8)
+        else:
+            valid_idx = np.arange(angle_idx.shape[0])
+        
+        angles = np.zeros((batch_size,)) - 1
+        angles[valid_idx] = ANGLES[angle_idx[valid_idx]]
+        
+        sines_cosines = np.zeros((batch_size,2))
+        sines_cosines[valid_idx,0] = np.sin(angles[valid_idx])
+        sines_cosines[valid_idx,1] = np.cos(angles[valid_idx])
+        #sines_cosines, angles, angle_idx = quantize_angles(sines_cosines, angles)
     
         
         
@@ -143,8 +166,11 @@ for combo in COMBINATIONS:
         A = np.zeros((756,756))
         
         for u in range(756):
+
             if u==TARGET:
-               continue
+                continue
+            if angle_idx[u]==8:
+                continue
             u_xy = env.states[u]
             
             delta = directions[angle_idx[u]]
@@ -181,13 +207,17 @@ for combo in COMBINATIONS:
         
         target_acc = V_ts/N
         accs.append(target_acc)    
+        print(len(targets))
+        print(V_ts)
+        print(len(g_component))
+        print('Spot Accuracy: ',target_acc)
         print('Accuracy: ',np.mean(accs))
         
         if VISUALIZE:
             env.plot_results(angles, sines_cosines, TARGET, random=True, target_num=7, wall_num=-2)
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-            viz_policy(TARGET,map_data,G,env.states,g_component=g_component)
-            break;
+            viz_policy(TARGET,targets,map_data,G,env.states,g_component=g_component)
+            #break;
         
 Z = np.array(Z,dtype=float)
 print(Z)
