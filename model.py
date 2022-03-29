@@ -157,7 +157,6 @@ class rlf(keras.Model):
     
         if self.use_conv:
             base_sz = 16
-            self.conv0 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=None, padding='same',name='conv0')
             self.conv1 = tf.keras.layers.Conv2D(base_sz, [5,5], strides=(2, 2), activation=tf.nn.leaky_relu, padding='same',name='conv1')
             self.conv11 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=tf.nn.leaky_relu, padding='same',name='conv11')
             self.conv12 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=tf.nn.leaky_relu, padding='same',name='conv12')
@@ -222,9 +221,8 @@ class rlf(keras.Model):
         
         
         if self.use_conv:
-            h0 = self.conv0(I)
             
-            h1 = self.conv1(h0)
+            h1 = self.conv1(I)
             h1 += self.conv11(h1) + self.conv12(h1)
             
             h2 = self.conv2(h1)
