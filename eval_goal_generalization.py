@@ -139,7 +139,8 @@ for combo in COMBINATIONS:
         print(model.evaluate(dataset))
         BATCH = next(iter(dataset))
 
-        sines_cosines = model.forward_pass(next(iter(dataset)),training=False).numpy()
+        res = model.forward_pass(next(iter(dataset)),training=False)
+        sines_cosines = res[0].numpy()
         angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
         ANGLES = np.arange(8)*np.pi/4
         

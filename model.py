@@ -24,16 +24,16 @@ def setup_model(experiment,batch_size,maps,load=False,eager=False):
     if toml_data['walls']:
         out_num += 1
     
-    model = rlf(batch_size,maps,toml_data['use_conv'],out_num,method=toml_data['method'],f_sz=f_sz)
+    model = rlf(batch_size,maps,toml_data['use_conv'],out_num,use_walls=toml_data['walls'],method=toml_data['method'],f_sz=f_sz)
     
 
 
     model.compile(
-        optimizer=keras.optimizers.Adam(1e-4),
+        optimizer=keras.optimizers.Adam(1e-5),
         loss=loss_fn,
         metrics=[metric_fn], run_eagerly=eager
     )
-    model.build([(batch_size),(batch_size, 4),(batch_size, out_num)])
+    model.build([(batch_size),(batch_size, 4),(batch_size,2),(batch_size, out_num),(batch_size,2)])
 
     if load:
         model.load_weights(log_dir + 'model/weights').expect_partial()
@@ -45,18 +45,24 @@ def setup_model(experiment,batch_size,maps,load=False,eager=False):
 
 class rlf(keras.Model):
 
-    def __init__(self,BATCH_SIZE,maps,use_conv,out_num,method='hyp',lr=1e-4,f_sz=None,classification=False,writer=None):
+    def __init__(self,BATCH_SIZE,maps,use_conv,out_num,method='hyp',use_walls=False,lr=1e-4,f_sz=None,classification=False,writer=None):
     
         self.BATCH_SIZE = BATCH_SIZE
         self.classification = classification
         super(rlf, self).__init__()
         self.maps = maps
         self.use_conv = use_conv
+        self.use_walls = use_walls
         self.out_num = out_num
 
         
         self.bottleneck_sz = 128
         
+        self.policy_acc = tf.keras.metrics.SparseCategoricalAccuracy('policy_acc')
+        
+        if self.use_walls:
+            self.occupancy_acc = tf.keras.metrics.SparseCategoricalAccuracy('occupancy_acc')
+            self._create_cls()
         
         self.writer = writer
         
@@ -79,7 +85,6 @@ class rlf(keras.Model):
             self.hypernet = False
             self._create_embedding()
             
-        
 
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr);
         if self.classification:
@@ -97,7 +102,7 @@ class rlf(keras.Model):
         
         
     def forward_pass(self, inputs, training=False):
-        [indices, states, _] = inputs
+        [indices, states, plain_states, _, _] = inputs
         
         states = tf.cast(states,tf.float32)
         
@@ -108,15 +113,17 @@ class rlf(keras.Model):
         
         if self.hypernet:
             theta_f = self.get_theta(indices)
-            
             theta = self.func_theta(states,theta_f,self.f_sz,4)
         else:
             z = self.encode(indices)
             theta = self.get_output(S,G,z)
         y = tf.nn.softmax(theta)
         
-        return y    
-        
+        if self.use_walls:
+            c = tf.nn.softmax(self.cls(self.z,S))
+            return y, c    
+        else:
+            return y    
 
     def func_theta(self,x,theta,sz,in_sz):
     
@@ -157,6 +164,7 @@ class rlf(keras.Model):
     
         if self.use_conv:
             base_sz = 16
+            self.conv0 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=None, padding='same',name='conv0')
             self.conv1 = tf.keras.layers.Conv2D(base_sz, [5,5], strides=(2, 2), activation=tf.nn.leaky_relu, padding='same',name='conv1')
             self.conv11 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=tf.nn.leaky_relu, padding='same',name='conv11')
             self.conv12 = tf.keras.layers.Conv2D(base_sz, [3,3], strides=(1, 1), activation=tf.nn.leaky_relu, padding='same',name='conv12')
@@ -197,6 +205,22 @@ class rlf(keras.Model):
         
         
     
+    def _create_cls(self):
+        init = tf.keras.initializers.RandomNormal(stddev=4.0)
+        self.B = tf.keras.layers.Dense(64,activation=None,kernel_initializer=init,name='rff')
+        self.cls1 = tf.keras.layers.Dense(64,activation=tf.nn.leaky_relu,name='cls1')
+        self.cls2 = tf.keras.layers.Dense(64,activation=tf.nn.leaky_relu,name='cls2')
+        self.cls3 = tf.keras.layers.Dense(64,activation=tf.nn.leaky_relu,name='cls3')
+        self.cls4 = tf.keras.layers.Dense(2,activation=None,name='cls4')
+        
+    def cls(self, z, y):
+        rff = self.B(y)
+        rff = tf.reshape(rff,[-1,64,1])
+        rff = tf.concat([tf.math.sin(rff),tf.math.cos(rff)],axis=-1)
+        rff = tf.reshape(rff,[-1,128])
+        cls_in = tf.concat([z,rff],axis=-1)
+        return self.cls4(self.cls3(self.cls2(self.cls1(cls_in))  )) 
+    
     def _create_hypernet(self):
             
         self.fW = []
@@ -221,8 +245,9 @@ class rlf(keras.Model):
         
         
         if self.use_conv:
+            h0 = self.conv0(I)
             
-            h1 = self.conv1(I)
+            h1 = self.conv1(h0)
             h1 += self.conv11(h1) + self.conv12(h1)
             
             h2 = self.conv2(h1)
@@ -286,10 +311,15 @@ class rlf(keras.Model):
     def train_step(self, inputs):
         with tf.GradientTape(persistent=False) as tape:
         
-            pred = self.forward_pass(inputs, training=True)
-            
-            loss = self.compiled_loss(inputs[-1], pred)
-            
+            if self.use_walls:
+                yp_hat, yc_hat = self.forward_pass(inputs, training=True)
+                policy_loss = self.compiled_loss(inputs[-2], yp_hat)
+                occupancy_loss = self.compiled_loss(inputs[-1], yc_hat)
+                loss = policy_loss + 1e-3*occupancy_loss
+            else:
+                yp_hat = self.forward_pass(inputs, training=True)
+                loss = self.compiled_loss(inputs[-2], yp_hat)
+
             if self.hypernet:
                 penalty = 0
                 for theta in self.thetas:
@@ -303,17 +333,37 @@ class rlf(keras.Model):
             self.optimizer.apply_gradients(zip(gradients, all_vars))
             # self.compiled_optimizer????
 
-        self.compiled_metrics.update_state(inputs[-1], pred)
+        
+        metrics = {}
+        
+        self.policy_acc.update_state(inputs[-2], yp_hat)
+        metrics[self.policy_acc.name] = self.policy_acc.result()
+        
+        if self.use_walls:
+            self.occupancy_acc.update_state(inputs[-1], yc_hat)
+            metrics[self.occupancy_acc.name] = self.occupancy_acc.result()
 
-        return {m.name: m.result() for m in self.metrics}
+        return metrics
 
     
     
     def test_step(self, inputs):
-        pred = self.forward_pass(inputs, training=False)
-        self.compiled_metrics.update_state(inputs[-1], pred)
+        if self.use_walls:
+            yp_hat, yc_hat = self.forward_pass(inputs, training=False)
+        else:
+            yp_hat = self.forward_pass(inputs, training=False)
+            
+        metrics = {}
+        
+        self.policy_acc.update_state(inputs[-2], yp_hat)
+        metrics[self.policy_acc.name] = self.policy_acc.result()
+        
+        if self.use_walls:
+            self.occupancy_acc.update_state(inputs[-1], yc_hat)
+            metrics[self.occupancy_acc.name] = self.occupancy_acc.result()
 
-        return {m.name: m.result() for m in self.metrics}
+        return metrics
+
 
     def call(self, inputs):
         return self.forward_pass(inputs)

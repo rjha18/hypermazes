@@ -68,7 +68,7 @@ def viz_policy(target,targets,map_data,graph,states,g_component=None):
     node_sizes = np.array([10,]*num_nodes)
     node_color = np.array(["b",]*num_nodes)
 
-    node_color[targets] = 'm'
+    #node_color[targets] = 'm'
 
     if g_component is not None:
         node_color[np.array(g_component,dtype=int)] = "g"
