@@ -69,13 +69,7 @@ class rlf(keras.Model):
             self.decay = L2(self.decay_rate)
             Ng = self.total_func_size(4,prim_sz)
             ratio = (128+Ng)/(128+prim_sz[0])
-            print(ratio)
-            print(Ng)
-            print(bottleneck)
-            input()
             self.embedding_dim =  np.int32(np.ceil(bottleneck*ratio))
-            print(self.embedding_dim)
-            input()
             self._create_embedding()
             
             
