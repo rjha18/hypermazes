@@ -1,6 +1,7 @@
 import os
 import sys
 
+import matplotlib.pyplot as plt
 
 from tensorflow import keras
 import tensorflow as tf
@@ -40,6 +41,12 @@ if not has_splits(EXPERIMENT):
 
 train_dataset, val_dataset, maps = generate_train_val(EXPERIMENT, batch_size)
 
+'''
+plt.imshow(maps.numpy()[0,0])
+plt.show()
+'''
+
+
 
 # Initialize model saving
 log_dir = get_log_dir(EXPERIMENT)
@@ -48,7 +55,7 @@ writer = tf.summary.create_file_writer(log_dir)
 
 writer = keras.callbacks.TensorBoard(log_dir, update_freq=1)
 early = tf.keras.callbacks.EarlyStopping(monitor="val_policy_acc",
-        patience=10,
+        patience=20,
         verbose=0,
         restore_best_weights=True
 )
@@ -64,6 +71,8 @@ model = setup_model(EXPERIMENT,batch_size,maps,load=LOAD_MODEL);
 model.summary()
 
 
+
+#model.evaluate(val_dataset)
 # Train model
 model.fit(
 	train_dataset,
@@ -74,8 +83,10 @@ model.fit(
 	verbose = 1
 )
 
-model.evaluate(val_dataset)
 
 
 # Save Model
 model.save_weights(log_dir + 'model/weights')
+model.load_weights(log_dir + 'model/weights')
+
+model.evaluate(val_dataset)

@@ -13,7 +13,7 @@ import networkx as nx
 from model import rlf, setup_model
 from utils import get_Q_fnms, fnm_from_combination, get_log_dir, get_data_dir, quantize_angles, directions, extract_toml, viz_policy, get_policy
 from environment import gridworld_env
-from data_utils import generate_dataset_from_target,generate_train_val,generate_test
+from data_utils import generate_dataset_from_target,generate_train_val,generate_test,inspect_settings
 
 import matplotlib.pyplot as plt
 
@@ -105,6 +105,11 @@ batch_size = num_nodes
 accs = []
 Z = []
     
+#train_dataset, val_dataset, maps = generate_train_val(EXPERIMENT, batch_size)
+#model = setup_model(EXPERIMENT,batch_size,maps,load=True,eager=True);
+#model.evaluate(train_dataset)
+#model.evaluate(val_dataset)
+
 
 
 for combo in COMBINATIONS:
@@ -122,9 +127,6 @@ for combo in COMBINATIONS:
     print(counter)
     counter += 1
 
-
-
-
     N = len(targets)
 
 
@@ -136,28 +138,27 @@ for combo in COMBINATIONS:
     for TARGET in targets:
         dataset, maps, Q, map_data = generate_dataset_from_target(EXPERIMENT, TARGET, combo)
 
-        print(model.evaluate(dataset))
+        eval_acc = model.evaluate(dataset)
+        print(eval_acc)
         BATCH = next(iter(dataset))
 
-        res = model.forward_pass(next(iter(dataset)),training=False)
-        sines_cosines = res[0].numpy()
+        sines_cosines = model.forward_pass(next(iter(dataset)),training=False).numpy()
+            
         angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
         ANGLES = np.arange(8)*np.pi/4
         
-        angle_idx = np.argmax(sines_cosines,axis=-1)
-        if model.out_num==9:
-            valid_idx = np.where(angle_idx<8)
-        else:
-            valid_idx = np.arange(angle_idx.shape[0])
         
-        angles = np.zeros((batch_size,)) - 1
-        angles[valid_idx] = ANGLES[angle_idx[valid_idx]]
+        
+        angle_idx = np.argmax(sines_cosines,axis=-1)
+        angles = ANGLES[angle_idx]
+        
         
         sines_cosines = np.zeros((batch_size,2))
-        sines_cosines[valid_idx,0] = np.sin(angles[valid_idx])
-        sines_cosines[valid_idx,1] = np.cos(angles[valid_idx])
+        sines_cosines[:,0] = np.sin(angles)
+        sines_cosines[:,1] = np.cos(angles)
         #sines_cosines, angles, angle_idx = quantize_angles(sines_cosines, angles)
     
+        print(angles.shape)
         
         
         
@@ -216,10 +217,11 @@ for combo in COMBINATIONS:
         
         if VISUALIZE:
             env.plot_results(angles, sines_cosines, TARGET, random=True, target_num=7, wall_num=-2)
+            plt.show()
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
             viz_policy(TARGET,targets,map_data,G,env.states,g_component=g_component)
             #break;
-        
+'''
 Z = np.array(Z,dtype=float)
 print(Z)
 from sklearn.manifold import TSNE
@@ -235,6 +237,7 @@ exit(0)
 if not VISUALIZE:
     print('Accuracy: ',np.mean(accs))
        
+'''
        
        
        

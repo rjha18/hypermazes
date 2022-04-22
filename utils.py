@@ -85,6 +85,7 @@ def viz_policy(target,targets,map_data,graph,states,g_component=None):
             arrowsize=3,
             width=1
     )
+    plt.ylim(29,0)
     plt.show()
 
 def quantize(angles, levels):
