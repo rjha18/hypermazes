@@ -25,6 +25,7 @@ parser.add_argument('--comb_split', help="combination split to sample", default=
 parser.add_argument('--visualize', help="visualize policy", default=0, type=int)
 parser.add_argument('--target_split', help="state split to sample", default='test', type=str)
 parser.add_argument('--max_test_combos', help="maximum combinations used for testing", default=20, type=int)
+parser.add_argument('--plain', help="use plain accuracy instead of reachability", default=0, type=int)
 
 args = parser.parse_args()
 EXPERIMENT = args.experiment
@@ -35,6 +36,7 @@ else:
 COMB_SPLIT = args.comb_split
 VISUALIZE = args.visualize
 TARGET_SPLIT = args.target_split
+PLAIN = args.plain
 
 MAX_COMBOS = args.max_test_combos
 
@@ -58,7 +60,8 @@ if COMBINATION==None:
         eval_combinations = np.array(eval_combinations)
         
         # change this for deterministic testing
-        eval_combinations = np.random.permutation(eval_combinations)[:MAX_COMBOS]
+        #eval_combinations = np.random.permutation(eval_combinations)[:MAX_COMBOS]
+        eval_combinations = eval_combinations[:MAX_COMBOS]
         
         COMBINATIONS = [tuple(map(int, eval_combination[9:-5].split('_'))) for eval_combination in eval_combinations]
         print('Evaluating ' +str(MAX_COMBOS) + ' test combinations!')
@@ -82,7 +85,6 @@ else:
         exit(-1)
         
         
-batch_size = 128
 
 '''
 _, val_dataset, maps = generate_train_val(EXPERIMENT, batch_size)
@@ -138,89 +140,93 @@ for combo in COMBINATIONS:
     for TARGET in targets:
         dataset, maps, Q, map_data = generate_dataset_from_target(EXPERIMENT, TARGET, combo)
 
-        eval_acc = model.evaluate(dataset)
-        print(eval_acc)
-        BATCH = next(iter(dataset))
+        if PLAIN:
+            target_acc = model.evaluate(dataset,verbose=0)
+        else:
+            BATCH = next(iter(dataset))
 
-        sines_cosines = model.forward_pass(next(iter(dataset)),training=False).numpy()
-            
-        angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
-        ANGLES = np.arange(8)*np.pi/4
-        
-        
-        
-        angle_idx = np.argmax(sines_cosines,axis=-1)
-        angles = ANGLES[angle_idx]
-        
-        
-        sines_cosines = np.zeros((batch_size,2))
-        sines_cosines[:,0] = np.sin(angles)
-        sines_cosines[:,1] = np.cos(angles)
-        #sines_cosines, angles, angle_idx = quantize_angles(sines_cosines, angles)
-    
-        print(angles.shape)
-        
-        
-        
-        Z += [model.z[0]]
-        
-        
-        A = np.zeros((756,756))
-        
-        for u in range(756):
-
-            if u==TARGET:
-                continue
-            if angle_idx[u]==8:
-                continue
-            u_xy = env.states[u]
-            
-            delta = directions[angle_idx[u]]
-            delta = np.array(delta).reshape([1,2])
-            delta = np.fliplr(delta)
-
-            v_xy = u_xy + delta
-            v_key = env.state_to_key(v_xy)
-            
-            if v_key not in env.state_lookup.keys():
-                continue;
+            sines_cosines = model.forward_pass(next(iter(dataset)),training=False).numpy()
                 
-            v = env.state_lookup[v_key]
+            angles = np.arctan2(sines_cosines[:, 0], sines_cosines[:, 1])
+            ANGLES = np.arange(8)*np.pi/4
             
-            A[u,v] = 1
             
-        At = np.transpose(A)
-        G = nx.from_numpy_matrix(At, create_using=nx.DiGraph)
+            
+            angle_idx = np.argmax(sines_cosines,axis=-1)
+            angles = ANGLES[angle_idx]
+            
+            
+            sines_cosines = np.zeros((batch_size,2))
+            sines_cosines[:,0] = np.sin(angles)
+            sines_cosines[:,1] = np.cos(angles)
+            #sines_cosines, angles, angle_idx = quantize_angles(sines_cosines, angles)
         
-        paths = dict(nx.all_pairs_shortest_path_length(G))
-        
-        g_component = list(paths[TARGET].keys())
-        V_ts = len(np.intersect1d(g_component,targets))
-        # Alternative using weakly connected components
-        G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-        components = nx.weakly_connected_components(G)
-        
-        for component in sorted(components, key=len, reverse=True):
-            if TARGET in component:
-                g_component = list(component)
-                break;
-        V_ts = len(np.intersect1d(g_component,targets))
-        
-        
-        target_acc = V_ts/N
-        accs.append(target_acc)    
-        print(len(targets))
-        print(V_ts)
-        print(len(g_component))
-        print('Spot Accuracy: ',target_acc)
-        print('Accuracy: ',np.mean(accs))
-        
-        if VISUALIZE:
-            env.plot_results(angles, sines_cosines, TARGET, random=True, target_num=7, wall_num=-2)
-            plt.show()
+            #print(angles.shape)
+            
+            
+            
+            #Z += [model.z[0]]
+            
+            
+            A = np.zeros((756,756))
+            
+            for u in range(756):
+
+                if u==TARGET:
+                    continue
+                if angle_idx[u]==8:
+                    continue
+                u_xy = env.states[u]
+                
+                delta = directions[angle_idx[u]]
+                delta = np.array(delta).reshape([1,2])
+                delta = np.fliplr(delta)
+
+                v_xy = u_xy + delta
+                v_key = env.state_to_key(v_xy)
+                
+                if v_key not in env.state_lookup.keys():
+                    continue;
+                    
+                v = env.state_lookup[v_key]
+                
+                A[u,v] = 1
+                
+            At = np.transpose(A)
+            G = nx.from_numpy_matrix(At, create_using=nx.DiGraph)
+            
+            paths = dict(nx.all_pairs_shortest_path_length(G))
+            
+            g_component = list(paths[TARGET].keys())
+            V_ts = len(np.intersect1d(g_component,targets))
+            # Alternative using weakly connected components
             G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
-            viz_policy(TARGET,targets,map_data,G,env.states,g_component=g_component)
-            #break;
+            components = nx.weakly_connected_components(G)
+            
+            for component in sorted(components, key=len, reverse=True):
+                if TARGET in component:
+                    g_component = list(component)
+                    break;
+            V_ts = len(np.intersect1d(g_component,targets))
+            
+            
+            target_acc = V_ts/N
+            
+            
+            #print(len(targets))
+            #print(V_ts)
+            #print(len(g_component))
+            #print('Spot Accuracy: ',target_acc)
+            
+            if VISUALIZE:
+                env.plot_results(angles, sines_cosines, TARGET, random=True, target_num=7, wall_num=-2)
+                plt.show()
+                G = nx.from_numpy_matrix(A, create_using=nx.DiGraph)
+                viz_policy(TARGET,targets,map_data,G,env.states,g_component=g_component)
+                #break;
+                
+        accs.append(target_acc)    
+    print('Accuracy: ',np.mean(accs))
 '''
 Z = np.array(Z,dtype=float)
 print(Z)
